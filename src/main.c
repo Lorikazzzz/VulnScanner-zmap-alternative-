@@ -25,7 +25,7 @@ void help() {
     printf("  -G, --gateway-mac=addr      Manual gateway MAC (e.g. 00:11:22:33:44:55)\n");
     printf("  -v, --verbose               More verbose output\n");
     printf("  -d, --dryrun                Don't actually send packets\n");
-    printf("  -q  --quiet                 Runs the scanner at quiet mode");
+    printf("  -q  --quiet                 Runs the scanner at quiet mode\n");
     printf("  -h, --help                  Print this help and exit\n");
 }
 
@@ -55,7 +55,7 @@ void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
     };
     int option_index = 0;
     
-    while ((opt = getopt_long(argc, argv, "i:s:t:p:r:b:w:o:B:S:T:R:G:q", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "i:s:t:p:r:b:w:o:B:S:T:R:G:q:h", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'i': config->interface = strdup(optarg); break;
             case 's':
@@ -481,3 +481,4 @@ int main(int argc, char *argv[]) {
     if (!quiet_mode) printf("[*] Scan completed.\n");
     return 0;
 }
+
