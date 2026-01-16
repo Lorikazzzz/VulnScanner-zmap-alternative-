@@ -173,9 +173,9 @@ unsigned short calculate_tcp_checksum(struct tcphdr *tcp, uint32_t src_ip, uint3
     return ~sum;
 }
 
-void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
-                      unsigned short src_port, unsigned short dst_port,
-                      uint8_t *src_mac, uint8_t *dst_mac) { // constructs raw tcp syn packet 
+void create_tcp_packet_flags(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
+                            unsigned short src_port, unsigned short dst_port,
+                            uint8_t *src_mac, uint8_t *dst_mac, uint8_t flags) {
     memset(packet->buffer, 0, PACKET_SIZE);
     
     struct ethhdr *eth = (struct ethhdr *)packet->buffer;
@@ -202,45 +202,125 @@ void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
     tcph->seq = htonl(100);
     tcph->ack_seq = 0;
     
-    tcph->doff = 8; 
-    tcph->syn = 1;
+    tcph->doff = 5; // Default 20 bytes if no options
+    
+    // Flags
+    tcph->fin = (flags & 0x01) ? 1 : 0;
+    tcph->syn = (flags & 0x02) ? 1 : 0;
+    tcph->rst = (flags & 0x04) ? 1 : 0;
+    tcph->psh = (flags & 0x08) ? 1 : 0;
+    tcph->ack = (flags & 0x10) ? 1 : 0;
+    tcph->urg = (flags & 0x20) ? 1 : 0;
+    
     tcph->window = htons(64240); 
     tcph->check = 0;
     tcph->urg_ptr = 0;
+
+    // Optional MSS for SYN
+    if (flags & 0x02) {
+         tcph->doff = 6; // +4 bytes option
+         unsigned char *opt_ptr = (unsigned char *)tcph + sizeof(struct tcphdr);
+         opt_ptr[0] = 2; opt_ptr[1] = 4;
+         *(uint16_t *)(opt_ptr + 2) = htons(1460);
+         iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr) + 4);
+    }
     
-
-    unsigned char *opt_ptr = (unsigned char *)tcph + sizeof(struct tcphdr);
-    opt_ptr[0] = 2; opt_ptr[1] = 4;
-    *(uint16_t *)(opt_ptr + 2) = htons(1460);
-    opt_ptr += 4;
-
-
-    opt_ptr[0] = 1; opt_ptr[1] = 1;
-    opt_ptr += 2;
-
-
-    opt_ptr[0] = 4; opt_ptr[1] = 2;
-    opt_ptr += 2;
-
-
-    opt_ptr[0] = 1;
-    opt_ptr += 1;
-
-
-    opt_ptr[0] = 3; opt_ptr[1] = 3; opt_ptr[2] = 7;
-    
-
-    uint16_t tcp_total_len = 32;
-    
-    iph->tot_len = htons(sizeof(struct iphdr) + tcp_total_len);
     iph->check = calculate_ip_checksum(iph);
-    
     tcph->check = calculate_tcp_checksum(tcph, src_ip, dst_ip);
     
-    packet->length = sizeof(struct ethhdr) + sizeof(struct iphdr) + tcp_total_len;
-    
+    packet->length = ntohs(iph->tot_len) + sizeof(struct ethhdr);
+    if (packet->length < 60) packet->length = 60;
+}
 
-    if (packet->length < 60) {
-        packet->length = 60;
+void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
+                      unsigned short src_port, unsigned short dst_port,
+                      uint8_t *src_mac, uint8_t *dst_mac) { // constructs raw tcp syn packet 
+    create_tcp_packet_flags(packet, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, 0x02);
+}
+
+void create_udp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
+                       unsigned short src_port, unsigned short dst_port,
+                       uint8_t *src_mac, uint8_t *dst_mac) {
+    memset(packet->buffer, 0, PACKET_SIZE);
+    
+    struct ethhdr *eth = (struct ethhdr *)packet->buffer;
+    memcpy(eth->h_dest, dst_mac, 6);
+    memcpy(eth->h_source, src_mac, 6);
+    eth->h_proto = htons(ETH_P_IP);
+    
+    struct iphdr *iph = (struct iphdr *)(packet->buffer + sizeof(struct ethhdr));
+    iph->ihl = 5;
+    iph->version = 4;
+    iph->tos = 0;
+    iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr)); // Empty payload
+    iph->id = 0;
+    iph->frag_off = 0;
+    iph->ttl = 64;
+    iph->protocol = IPPROTO_UDP;
+    iph->check = 0;
+    iph->saddr = src_ip;
+    iph->daddr = dst_ip;
+    
+    struct udphdr *udph = (struct udphdr *)(packet->buffer + sizeof(struct ethhdr) + sizeof(struct iphdr));
+    udph->source = htons(src_port);
+    udph->dest = htons(dst_port);
+    udph->len = htons(sizeof(struct udphdr));
+    udph->check = 0; 
+    
+    iph->check = calculate_ip_checksum(iph);
+    // UDP Checksum optional but recommended? Masscan sends 0 usually for speed unless specified.
+    // However, modern stacks might drop 0 checksum for IPv6 (not v4).
+    // Let's leave 0 for speed as per masscan default or calculate it if needed.
+    
+    packet->length = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
+    if (packet->length < 60) packet->length = 60;
+}
+
+unsigned short calculate_icmp_checksum(struct icmphdr *icmp, int len) {
+    unsigned short *buf = (unsigned short *)icmp;
+    unsigned int sum = 0;
+    icmp->checksum = 0;
+    for (int i = 0; i < len / 2; i++) {
+        sum += buf[i];
     }
+    if (len % 2) {
+        sum += *(unsigned char *)&buf[len/2];
+    }
+    while (sum >> 16) sum = (sum & 0xFFFF) + (sum >> 16);
+    return ~sum;
+}
+
+void create_icmp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip, uint8_t *src_mac, uint8_t *dst_mac) {
+    memset(packet->buffer, 0, PACKET_SIZE);
+    
+    struct ethhdr *eth = (struct ethhdr *)packet->buffer;
+    memcpy(eth->h_dest, dst_mac, 6);
+    memcpy(eth->h_source, src_mac, 6);
+    eth->h_proto = htons(ETH_P_IP);
+    
+    struct iphdr *iph = (struct iphdr *)(packet->buffer + sizeof(struct ethhdr));
+    iph->ihl = 5;
+    iph->version = 4;
+    iph->tos = 0;
+    iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct icmphdr)); 
+    iph->id = 0;
+    iph->frag_off = 0;
+    iph->ttl = 64;
+    iph->protocol = IPPROTO_ICMP;
+    iph->check = 0;
+    iph->saddr = src_ip;
+    iph->daddr = dst_ip;
+    
+    struct icmphdr *icmph = (struct icmphdr *)(packet->buffer + sizeof(struct ethhdr) + sizeof(struct iphdr));
+    icmph->type = ICMP_ECHO;
+    icmph->code = 0;
+    icmph->un.echo.id = htons(1234);
+    icmph->un.echo.sequence = 0;
+    icmph->checksum = 0;
+    icmph->checksum = calculate_icmp_checksum(icmph, sizeof(struct icmphdr));
+    
+    iph->check = calculate_ip_checksum(iph);
+
+    packet->length = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr);
+    if (packet->length < 60) packet->length = 60;
 }

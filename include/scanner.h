@@ -37,6 +37,7 @@ uint32_t get_local_ip(const char *interface);
 unsigned short calculate_ip_checksum(struct iphdr *iph);
 unsigned short calculate_tcp_checksum(struct tcphdr *tcp, uint32_t src_ip, uint32_t dst_ip);
 void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,unsigned short src_port, unsigned short dst_port,uint8_t *src_mac, uint8_t *dst_mac);
+void create_udp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,unsigned short src_port, unsigned short dst_port,uint8_t *src_mac, uint8_t *dst_mac);
 
 
 uint32_t xorshift32(uint32_t *state);
@@ -45,8 +46,6 @@ void format_count(double count, char *buf);
 void format_zmap_rate(double rate, char *buf);
 void int_to_ip(uint32_t ip_int, char *buffer);
 uint32_t ip_to_int(const char *ip);
-void init_feistel_cipher();
-uint64_t encrypt_index(uint64_t index, uint64_t range_size);
 uint32_t get_ip_from_index(uint64_t index, ip_range_t *ip_ranges, int num_ip_ranges);
 uint64_t calculate_total_ips(ip_range_t *ip_ranges, int num_ip_ranges);
 

@@ -2,12 +2,17 @@
 
 void ip_per_thread(ip_range_t *ip_ranges, int num_ip_ranges, port_range_t *port_ranges, int num_port_ranges, thread_context_t *contexts, int num_threads) { 
     uint64_t total_ips = calculate_total_ips(ip_ranges, num_ip_ranges);
-    if (total_ips == 0) return;
+    uint64_t total_ports = 0;
+    for (int i = 0; i < num_port_ranges; i++) {
+        total_ports += port_ranges[i].end - port_ranges[i].start + 1;
+    }
+    uint64_t total_packets = total_ips * total_ports;
+    if (total_packets == 0) return;
 
     for (int t = 0; t < num_threads; t++) {
-        uint64_t ips_per_thread = total_ips / num_threads;
-        uint64_t start_idx = t * ips_per_thread;
-        uint64_t end_idx = (t == num_threads - 1) ? total_ips : (t + 1) * ips_per_thread;
+        uint64_t pkts_per_thread = total_packets / num_threads;
+        uint64_t start_idx = t * pkts_per_thread;
+        uint64_t end_idx = (t == num_threads - 1) ? total_packets : (t + 1) * pkts_per_thread;
         
         contexts[t].work.global_start_idx = start_idx;
         contexts[t].work.global_end_idx = end_idx;
@@ -15,6 +20,8 @@ void ip_per_thread(ip_range_t *ip_ranges, int num_ip_ranges, port_range_t *port_
         
         contexts[t].work.all_ip_ranges = ip_ranges;
         contexts[t].work.total_ip_ranges = num_ip_ranges;
+        contexts[t].work.total_ips = total_ips;
+        contexts[t].work.total_packets = total_packets;
         
         contexts[t].work.port_ranges = port_ranges;
         contexts[t].work.num_port_ranges = num_port_ranges;
@@ -94,10 +101,16 @@ void *sender_thread(void *arg) {
         return NULL;
     }
 
-    packet_t template_pkt;
-    create_syn_packet(&template_pkt, ctx->src_ip, 0, 
-                     ctx->src_port, ctx->work.port_ranges[0].start,
-                     ctx->config->src_mac, ctx->config->dst_mac);
+    packet_t scan_pkt;
+    if (ctx->config->scan_method == SCAN_METHOD_UDP) {
+        create_udp_packet(&scan_pkt, ctx->src_ip, 0, ctx->src_port, ctx->work.port_ranges[0].start,
+                         ctx->config->src_mac, ctx->config->dst_mac);
+    } else {
+        // Default to SYN
+        create_syn_packet(&scan_pkt, ctx->src_ip, 0, 
+                         ctx->src_port, ctx->work.port_ranges[0].start,
+                         ctx->config->src_mac, ctx->config->dst_mac);
+    }
 
     uint32_t tp_mac = TPACKET_ALIGN(sizeof(struct tpacket2_hdr));
     for (int i = 0; i < req.tp_frame_nr; i++) {
@@ -105,7 +118,7 @@ void *sender_thread(void *arg) {
         t_hdr->tp_mac = tp_mac;
         t_hdr->tp_net = tp_mac + sizeof(struct ethhdr);
         unsigned char *pkt_ptr = (unsigned char *)t_hdr + tp_mac;
-        memcpy(pkt_ptr, template_pkt.buffer, template_pkt.length);
+        memcpy(pkt_ptr, scan_pkt.buffer, scan_pkt.length);
     }
                      
     struct timeval start_time;
@@ -113,9 +126,6 @@ void *sender_thread(void *arg) {
     ctx->last_send_time = start_time;
     ctx->packets_sent = 0;
     
-    uint64_t total_range_size = calculate_total_ips(ctx->work.all_ip_ranges, ctx->work.total_ip_ranges);
-    
-
     while (ctx->running && !stop_signal && ctx->work.current_global_idx < ctx->work.global_end_idx) {
         int batch_count = 0;
         int ring_batch = 0;
@@ -129,34 +139,52 @@ void *sender_thread(void *arg) {
                 continue;
             }
 
-            uint64_t real_idx = encrypt_index(ctx->work.current_global_idx, total_range_size);
-            uint32_t current_ip_nbo = get_ip_from_index(real_idx, ctx->work.all_ip_ranges, ctx->work.total_ip_ranges);
+            uint64_t index = blackrock_shuffle(&ctx->config->blackrock, ctx->work.current_global_idx);
+            
+            uint64_t ip_idx = index % ctx->work.total_ips;
+            uint64_t port_total_idx = index / ctx->work.total_ips;
+
+            uint32_t current_ip_nbo = get_ip_from_index(ip_idx, ctx->work.all_ip_ranges, ctx->work.total_ip_ranges);
             uint32_t current_ip_hbo = ntohl(current_ip_nbo);
 
             ctx->work.current_global_idx++;
 
-            int r_port_idx = xorshift32(&xor_state) % ctx->work.num_port_ranges;
-            uint16_t current_port = ctx->work.port_ranges[r_port_idx].start + 
-                                   (xorshift32(&xor_state) % (ctx->work.port_ranges[r_port_idx].end - ctx->work.port_ranges[r_port_idx].start + 1));
+            // Port selection
+            uint16_t current_port = 0;
+            uint64_t p_acc = 0;
+            for (int p = 0; p < ctx->work.num_port_ranges; p++) {
+                uint64_t p_count = ctx->work.port_ranges[p].end - ctx->work.port_ranges[p].start + 1;
+                if (port_total_idx < p_acc + p_count) {
+                    current_port = ctx->work.port_ranges[p].start + (port_total_idx - p_acc);
+                    break;
+                }
+                p_acc += p_count;
+            }
 
             if (is_blacklisted(current_ip_hbo)) continue;
 
             unsigned char *pkt_ptr = (unsigned char *)t_hdr + t_hdr->tp_mac;
             
-            t_hdr->tp_len = template_pkt.length;
+            t_hdr->tp_len = scan_pkt.length;
 
             struct iphdr *iph = (struct iphdr *)(pkt_ptr + sizeof(struct ethhdr));
-            struct tcphdr *tcph = (struct tcphdr *)(pkt_ptr + sizeof(struct ethhdr) + sizeof(struct iphdr));
             
             iph->daddr = current_ip_nbo;
             iph->id = (uint16_t)xorshift32(&xor_state);
-            tcph->dest = htons(current_port);
-            tcph->seq = htonl(xorshift32(&xor_state));
-            
             iph->check = 0; 
             iph->check = calculate_ip_checksum(iph);
-            tcph->check = 0; 
-            tcph->check = calculate_tcp_checksum(tcph, ctx->src_ip, current_ip_nbo);
+
+            if (ctx->config->scan_method == SCAN_METHOD_UDP) {
+                struct udphdr *udph = (struct udphdr *)(pkt_ptr + sizeof(struct ethhdr) + sizeof(struct iphdr));
+                udph->dest = htons(current_port);
+                udph->check = 0;
+            } else {
+                struct tcphdr *tcph = (struct tcphdr *)(pkt_ptr + sizeof(struct ethhdr) + sizeof(struct iphdr));
+                tcph->dest = htons(current_port);
+                tcph->seq = htonl(xorshift32(&xor_state));
+                tcph->check = 0; 
+                tcph->check = calculate_tcp_checksum(tcph, ctx->src_ip, current_ip_nbo);
+            }
             
             t_hdr->tp_status = TP_STATUS_SEND_REQUEST;
             frame_idx = (frame_idx + 1) % req.tp_frame_nr;

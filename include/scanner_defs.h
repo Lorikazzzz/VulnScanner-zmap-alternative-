@@ -37,6 +37,7 @@
 #ifdef USE_PFRING_ZC
 #include <pfring_zc.h>
 #endif
+#include "crypto-blackrock.h"
 
 #define MAX_PORTS 65535
 #define MAX_THREADS 256
@@ -44,6 +45,16 @@
 #define DEFAULT_RATE 10000000
 #define DEFAULT_BANDWIDTH 0
 #define MAX_IPS_PER_THREAD 16777216
+
+// Scan Methods
+#define SCAN_METHOD_SYN 0
+#define SCAN_METHOD_ACK 1
+#define SCAN_METHOD_FIN 2
+#define SCAN_METHOD_NULL 3
+#define SCAN_METHOD_XMAS 4
+#define SCAN_METHOD_UDP 5
+#define SCAN_METHOD_ICMP_ECHO 6
+
 #define ETH_HDRLEN 14
 #define IP4_HDRLEN 20
 #define TCP_HDRLEN 20
@@ -72,10 +83,12 @@ typedef struct { //def arg
     uint8_t dst_mac[6];
     int ifindex;
     int gateway_set;
+    int scan_method;
 #ifdef USE_PFRING_ZC
     pfring_zc_cluster *zc_cluster;
     pfring_zc_buffer_pool *zc_pool;
 #endif
+    struct BlackRock blackrock;
 } scanner_config_t;
 
 typedef struct { //scan
@@ -116,6 +129,8 @@ typedef struct { //thread worker
     uint64_t current_global_idx;
     ip_range_t *all_ip_ranges;
     int total_ip_ranges;
+    uint64_t total_ips;
+    uint64_t total_packets;
 } thread_work_t;
 
 typedef struct { //packet struct

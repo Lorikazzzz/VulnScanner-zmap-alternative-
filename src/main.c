@@ -51,11 +51,12 @@ void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
         {"quiet", no_argument, 0, 'q'},
         {"dryrun", no_argument, 0, 'd'},
         {"help", no_argument, 0, 'h'},
+        {"scan-method", required_argument, 0, 'm'},
         {0, 0, 0, 0}
     };
     int option_index = 0;
     
-    while ((opt = getopt_long(argc, argv, "i:s:t:p:r:b:w:o:B:S:T:R:G:q:h", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "i:s:t:p:r:b:w:o:B:S:T:R:G:m:q:h", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'i': config->interface = strdup(optarg); break;
             case 's':
@@ -89,6 +90,15 @@ void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
                     config->gateway_set = 1;
                 } else {
                     // invalid mac
+                    exit(1);
+                }
+                break;
+            }
+            case 'm': {
+                if (strcmp(optarg, "tcp") == 0 || strcmp(optarg, "syn") == 0) config->scan_method = SCAN_METHOD_SYN;
+                else if (strcmp(optarg, "udp") == 0) config->scan_method = SCAN_METHOD_UDP;
+                else {
+                    fprintf(stderr, "[-] Unknown scan method: %s (Supported: tcp, udp)\n", optarg);
                     exit(1);
                 }
                 break;
@@ -169,11 +179,11 @@ void *status_thread(void *arg) {
 
         if (!quiet_mode) {
             if (hrs > 0) {
-                fprintf(stderr, "\r%d:%02d:%02d %d%%; send: %llu %s (%s avg); recv: %llu %s (%s avg); hitrate: %.2f%%", 
+                fprintf(stderr, "\r%d:%02d:%02d %d%%; send: %llu %s (%s avg); recv: %llu %s (%s avg); hitrate: %.8f%%", 
                         hrs, mins, secs, (int)percent, current_sent, s_pps_sent, s_avg_pps_sent, 
                         current_recv, s_pps_recv, s_avg_pps_recv, hitrate);
             } else {
-                fprintf(stderr, "\r%02d:%02d %d%%; send: %llu %s (%s avg); recv: %llu %s (%s avg); hitrate: %.2f%%", 
+                fprintf(stderr, "\r%02d:%02d %d%%; send: %llu %s (%s avg); recv: %llu %s (%s avg); hitrate: %.8f%%", 
                         mins, secs, (int)percent, current_sent, s_pps_sent, s_avg_pps_sent, 
                         current_recv, s_pps_recv, s_avg_pps_recv, hitrate);
             }
@@ -189,10 +199,6 @@ void sighandler(int sig) {
 }
 
 int main(int argc, char *argv[]) { 
-    if (geteuid() != 0) {
-        fprintf(stderr, "[-] This program must be run as root\n");
-        return 1;
-    }
     
     signal(SIGINT, sighandler);
 
@@ -246,7 +252,7 @@ int main(int argc, char *argv[]) {
 
     srand(time(NULL) ^ getpid());
     
-    init_feistel_cipher();
+    // Initialized later when total_packets is known
 
 
     if (config.dry_run) {
@@ -288,6 +294,43 @@ int main(int argc, char *argv[]) {
     if (total_packets == 0) {
         fprintf(stderr, "[-] Nothing to scan\n");
         return 1;
+    }
+    
+    blackrock_init(&config.blackrock, total_packets, rand(), 4);
+    
+    // Performance self-test for shuffle uniqueness (spot checks)
+    if (!quiet_mode && total_packets > 1) {
+        printf("[*] Verifying shuffle integrity...\n");
+        uint64_t v1 = blackrock_shuffle(&config.blackrock, 0);
+        uint64_t v2 = blackrock_shuffle(&config.blackrock, total_packets - 1);
+        if (v1 >= total_packets || v2 >= total_packets) {
+            fprintf(stderr, "[!] CRITICAL: BlackRock shuffle out of range!\n");
+            return 1;
+        }
+        
+        // Check for early cycle for /0
+        if (total_packets >= 4294967296ULL) {
+             uint64_t v3 = blackrock_shuffle(&config.blackrock, 123456789);
+             if (v3 == v1 || v3 == v2) {
+                 fprintf(stderr, "[!] CRITICAL: BlackRock shuffle collision detected!\n");
+                 return 1;
+             }
+        }
+        
+        if (total_packets < 1000000) {
+            uint8_t *seen = calloc(total_packets, 1);
+            if (seen) {
+                for (uint64_t i = 0; i < total_packets; i++) {
+                    uint64_t val = blackrock_shuffle(&config.blackrock, i);
+                    if (seen[val]) {
+                        fprintf(stderr, "[!] CRITICAL: BlackRock shuffle self-test COLLISION at %lu\n", i);
+                        free(seen); return 1;
+                    }
+                    seen[val] = 1;
+                }
+                free(seen);
+            }
+        }
     }
     
     uint32_t src_ip = 0;

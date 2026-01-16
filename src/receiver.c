@@ -114,6 +114,16 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
         } else if (tcph->rst) {
             atomic_fetch_add(&stats->rst_replies, 1);
         }
+    } else if (iph->protocol == IPPROTO_UDP) {
+        // Any UDP data back is a hit
+        atomic_fetch_add(&stats->packets_received, 1);
+        atomic_fetch_add(&stats->hosts_up, 1); // Maybe?
+        atomic_fetch_add(&stats->ports_open, 1);
+        
+        char src_ip_str[16];
+        int_to_ip(iph->saddr, src_ip_str);
+        push_to_writer(src_ip_str);
+        
     } else if (iph->protocol == IPPROTO_ICMP) {
         struct icmphdr *icmph = (struct icmphdr *)(packet + offset + (iph->ihl * 4));
         if (icmph->type == ICMP_DEST_UNREACH) {

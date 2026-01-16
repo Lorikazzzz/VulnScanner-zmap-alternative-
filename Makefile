@@ -2,7 +2,8 @@ CC = gcc
 CFLAGS = -Wall -O3 -pthread -Iinclude -std=gnu99
 LDFLAGS = -lpthread -lm
 
-SRCS = src/main.c src/net.c src/utils.c src/sender.c src/receiver.c src/parsing.c
+SRCS = src/main.c src/net.c src/utils.c src/sender.c src/receiver.c src/parsing.c \
+       src/crypto-blackrock.c src/crypto-blackrock2.c src/util-malloc.c src/util-safefunc.c src/pixie-timer.c
 OBJS = $(SRCS:.c=.o)
 TARGET = scanner
 
