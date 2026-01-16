@@ -97,12 +97,12 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
 
     if (iph->daddr != src_ip) return;
 
-    atomic_fetch_add(&stats->packets_received, 1);
     
     if (iph->protocol == IPPROTO_TCP && length >= offset + (iph->ihl * 4) + TCP_HDRLEN) {
         struct tcphdr *tcph = (struct tcphdr *)(packet + offset + (iph->ihl * 4));
         
         if (tcph->syn && tcph->ack) {
+            atomic_fetch_add(&stats->packets_received, 1);
             atomic_fetch_add(&stats->syn_acks, 1);
             atomic_fetch_add(&stats->hosts_up, 1);
             atomic_fetch_add(&stats->ports_open, 1);
@@ -121,27 +121,6 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
         }
     }
 
-    if (stats->packets_received < 10) {
-        struct in_addr saddr, daddr;
-        saddr.s_addr = iph->saddr;
-        daddr.s_addr = iph->daddr;
-        char src[16], dst[16];
-        strcpy(src, inet_ntoa(saddr));
-        strcpy(dst, inet_ntoa(daddr));
-        
-        if (iph->protocol == IPPROTO_TCP) {
-             struct tcphdr *tcph = (struct tcphdr *)(packet + ETH_HDRLEN + (iph->ihl * 4));
-             if (ntohs(tcph->source) == 22 || ntohs(tcph->dest) == 22) return;
-             
-             if (!quiet_mode) {
-                 printf("\n[DEBUG] Recv Pkt: Proto=%d Src=%s Dst=%s Len=%d\n", iph->protocol, src, dst, length);
-                 printf("       TCP Flags: SYN=%d ACK=%d RST=%d FIN=%d Sport=%d Dport=%d\n", 
-                        tcph->syn, tcph->ack, tcph->rst, tcph->fin, ntohs(tcph->source), ntohs(tcph->dest));
-             }
-        } else {
-             if (!quiet_mode) printf("\n[DEBUG] Recv Pkt: Proto=%d Src=%s Dst=%s Len=%d\n", iph->protocol, src, dst, length);
-        }
-    }
 }
 
 void *receiver_thread(void *arg) { 
