@@ -1,9 +1,30 @@
-# VulnScanner-zmap-alternative-
-Zmap alternative for mass internet scans (waaaay faster then zmap)
+# An powerfull alternative to ZMap
 
-Setup:
-make (add USE_PFRING=1 if you want to use pfring on the scanner)
+**This project is still under development so it will improve overtime** \
+Also feel free to suggest things!
+## Tests
 
-this is made by Lorikaz. Contact me if you need any help
-telegram: Lorikazz.sh
-discord: lorikazzzz
+![4 scan threads](https://github.com/user-attachments/assets/11573427-4423-43b2-add3-8109786c5dcf)
+
+![1 Scan thread](https://github.com/user-attachments/assets/00abf201-9450-4a3d-b8cf-7ff6f0f935ce)
+
+![Commands](https://github.com/user-attachments/assets/a5fb779b-7b42-4899-90ab-37655d6b4041)
+  
+## Compilation
+
+```bash
+git clone https://github.com/Lorikazzzz/VulnScanner-zmap-alternative-.git
+cd VulnScanner-zmap-alternative-
+make (Add USE_PFRING_ZC=1 for pfring support)
+```
+
+  
+## Sources
+
+[Zmap](https://github.com/zmap/zmap) \
+[Masscan](https://github.com/robertdavidgraham/masscan) \
+[PFRING](https://github.com/ntop/PF_RING)
+
+
+
+  
