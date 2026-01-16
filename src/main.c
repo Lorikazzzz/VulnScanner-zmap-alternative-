@@ -4,11 +4,12 @@
 volatile int stop_signal = 0;
 pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
 FILE *output_file_ptr = NULL;
+int quiet_mode = 0;
 
 
 extern pthread_t writer_thread_id; 
 
-void print_help() {
+void help() { 
     printf("Basic Options:\n");
     printf("  -p, --target-port=port      Port(s) to scan (default: 80)\n");
     printf("  -o, --output-file=name      Output file (results will be appended)\n");
@@ -24,17 +25,18 @@ void print_help() {
     printf("  -G, --gateway-mac=addr      Manual gateway MAC (e.g. 00:11:22:33:44:55)\n");
     printf("  -v, --verbose               More verbose output\n");
     printf("  -d, --dryrun                Don't actually send packets\n");
+    printf("  -q  --quiet                 Runs the scanner at quiet mode");
     printf("  -h, --help                  Print this help and exit\n");
 }
 
-void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
+void parse_arguments(int argc, char *argv[], scanner_config_t *config) { 
     int opt;
     int help_requested = 0;
     
     static struct option long_options[] = {
         {"interface", required_argument, 0, 'i'},
         {"source-ip", required_argument, 0, 'S'},
-        {"target-range", required_argument, 0, 't'},
+        {"target-ip", required_argument, 0, 't'},
         {"target-port", required_argument, 0, 'p'},
         {"rate", required_argument, 0, 'r'},
         {"bandwidth", required_argument, 0, 'B'},
@@ -46,13 +48,14 @@ void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
         {"cooldown-time", required_argument, 0, 'c'},
         {"gateway-mac", required_argument, 0, 'G'},
         {"verbose", no_argument, 0, 'v'},
+        {"quiet", no_argument, 0, 'q'},
         {"dryrun", no_argument, 0, 'd'},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
     int option_index = 0;
     
-    while ((opt = getopt_long(argc, argv, "i:s:t:p:r:b:w:o:B:S:T:R:vhdc:", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "i:s:t:p:r:b:w:o:B:S:T:R:G:q", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'i': config->interface = strdup(optarg); break;
             case 's':
@@ -85,9 +88,14 @@ void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
                     for (int i=0; i<6; i++) config->dst_mac[i] = (uint8_t)m[i];
                     config->gateway_set = 1;
                 } else {
-                    fprintf(stderr, "[-] Invalid MAC format: %s\n", optarg);
+                    // invalid mac
                     exit(1);
                 }
+                break;
+            }
+            case 'q': {
+                config->quiet = 1; 
+                quiet_mode = 1;
                 break;
             }
             case 'h': help_requested = 1; break;
@@ -100,17 +108,13 @@ void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
     }
     
     if (help_requested) {
-        print_help();
+        help();
         exit(0);
     }
     
-    if (!config->target_range && !config->whitelist_file) {
-        fprintf(stderr, "[-] Target range required (-t) or whitelist (-w)\n");
-        exit(1);
-    }
 }
 
-void *status_thread(void *arg) {
+void *status_thread(void *arg) { 
     thread_context_t *ctx = (thread_context_t *)arg;
     struct timeval start_time;
     gettimeofday(&start_time, NULL);
@@ -163,26 +167,28 @@ void *status_thread(void *arg) {
         format_zmap_rate(pps_recv, s_pps_recv);
         format_zmap_rate(avg_pps_recv, s_avg_pps_recv);
 
-        if (hrs > 0) {
-            fprintf(stderr, "\r%d:%02d:%02d %d%%; send: %llu %s (%s avg); recv: %llu %s (%s avg); hitrate: %.2f%%", 
-                    hrs, mins, secs, (int)percent, current_sent, s_pps_sent, s_avg_pps_sent, 
-                    current_recv, s_pps_recv, s_avg_pps_recv, hitrate);
-        } else {
-            fprintf(stderr, "\r%02d:%02d %d%%; send: %llu %s (%s avg); recv: %llu %s (%s avg); hitrate: %.2f%%", 
-                    mins, secs, (int)percent, current_sent, s_pps_sent, s_avg_pps_sent, 
-                    current_recv, s_pps_recv, s_avg_pps_recv, hitrate);
+        if (!quiet_mode) {
+            if (hrs > 0) {
+                fprintf(stderr, "\r%d:%02d:%02d %d%%; send: %llu %s (%s avg); recv: %llu %s (%s avg); hitrate: %.2f%%", 
+                        hrs, mins, secs, (int)percent, current_sent, s_pps_sent, s_avg_pps_sent, 
+                        current_recv, s_pps_recv, s_avg_pps_recv, hitrate);
+            } else {
+                fprintf(stderr, "\r%02d:%02d %d%%; send: %llu %s (%s avg); recv: %llu %s (%s avg); hitrate: %.2f%%", 
+                        mins, secs, (int)percent, current_sent, s_pps_sent, s_avg_pps_sent, 
+                        current_recv, s_pps_recv, s_avg_pps_recv, hitrate);
+            }
+            fflush(stderr);
         }
-        fflush(stderr);
     }
-    fprintf(stderr, "\n");
+    if (!quiet_mode) fprintf(stderr, "\n");
     return NULL;
 }
 
-void sighandler(int sig) {
+void sighandler(int sig) { 
     stop_signal = 1;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) { 
     if (geteuid() != 0) {
         fprintf(stderr, "[-] This program must be run as root\n");
         return 1;
@@ -193,8 +199,8 @@ int main(int argc, char *argv[]) {
     scanner_config_t config = {
         .interface = NULL,
         .source_ip = NULL,
-        .target_range = NULL,
-        .port_range = strdup("80"),
+        .target_range = strdup("0.0.0.0/0"),
+        .port_range = NULL,
         .blacklist_file = NULL,
         .whitelist_file = NULL,
         .output_file = NULL,
@@ -206,6 +212,7 @@ int main(int argc, char *argv[]) {
         .dry_run = 0,
         .cooldown_secs = 5,
         .scan_type = 0,
+        .quiet = 0,
         .output_format = 3
     };
     
@@ -223,28 +230,27 @@ int main(int argc, char *argv[]) {
     writer_thread_id = writer_tid;
 
     if (config.blacklist_file) {
-        printf("[*] Loading blacklist from %s...\n", config.blacklist_file);
+        if (!quiet_mode) printf("[*] Loading blacklist from %s...\n", config.blacklist_file);
         if (load_blacklist(config.blacklist_file)) {
-            printf("[*] Loaded %d exclusion ranges\n", blacklist_count);
+            if (!quiet_mode) printf("[*] Loaded %d exclusion ranges\n", blacklist_count);
         }
     }
     
     if (config.whitelist_file) {
-        printf("[*] Loading whitelist from %s...\n", config.whitelist_file);
+        if (!quiet_mode) printf("[*] Loading whitelist from %s...\n", config.whitelist_file);
         if (load_whitelist(config.whitelist_file)) {
-            printf("[*] Loaded %d inclusion ranges\n", whitelist_count);
+            if (!quiet_mode) printf("[*] Loaded %d inclusion ranges\n", whitelist_count);
         }
     }
     
 
     srand(time(NULL) ^ getpid());
     
-
     init_feistel_cipher();
 
 
     if (config.dry_run) {
-        printf("[*] Dry run mode - no packets will be sent\n");
+        if (!quiet_mode) printf("[*] Dry run mode - no packets will be sent\n");
         return 0;
     }
     
@@ -259,7 +265,7 @@ int main(int argc, char *argv[]) {
     int num_active_ranges = 0;
 
     if (config.whitelist_file && whitelist_count > 0) {
-        printf("[*] Using whitelist as primary scan targets\n");
+        if (!quiet_mode) printf("[*] Using whitelist as primary scan targets\n");
         active_ip_ranges = whitelist;
         num_active_ranges = whitelist_count;
     } else {
@@ -304,36 +310,64 @@ int main(int argc, char *argv[]) {
     thread_context_t contexts[MAX_THREADS];
     memset(contexts, 0, sizeof(contexts));
     
-    distribute_work(active_ip_ranges, num_active_ranges, port_ranges, num_port_ranges, 
+    ip_per_thread(active_ip_ranges, num_active_ranges, port_ranges, num_port_ranges, 
                    contexts, config.senders);
     
     pthread_t sender_threads[MAX_THREADS];
     srand(time(NULL));
     
-    if (!config.interface) config.interface = strdup("eth0");
+    if (!config.interface) {
+        char auto_iface[64];
+        if (get_default_iface(auto_iface) == 0) {
+            config.interface = strdup(auto_iface);
+        } else {
+            config.interface = strdup("eth0");
+        }
+    }
     if (get_ifdetails(config.interface, &config.ifindex, config.src_mac) < 0) {
         fprintf(stderr, "[-] Could not get details for interface %s\n", config.interface);
         return 1;
     }
+
+#ifdef USE_PFRING_ZC
+    int cluster_id = 10;
+    config.zc_cluster = pfring_zc_create_cluster(cluster_id, 1500, 0, 1024 + (config.senders + config.receivers) * BATCH_SIZE, 0, NULL, 0);
+    if (config.zc_cluster == NULL) {
+        return 1;
+    }
+    config.zc_pool = pfring_zc_create_buffer_pool(config.zc_cluster, 1024 + (config.senders + config.receivers) * BATCH_SIZE);
+    if (config.zc_pool == NULL) {
+        return 1;
+    }
+#endif
     
     char src_ip_str[32];
     int_to_ip(src_ip, src_ip_str);
-    printf("[*] Source IP: %s\n", src_ip_str);
-    printf("[*] Interface: %s (Index: %d)\n", config.interface, config.ifindex);
-    printf("[*] Source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-           config.src_mac[0], config.src_mac[1], config.src_mac[2],
-           config.src_mac[3], config.src_mac[4], config.src_mac[5]);
-    
-    if (!config.gateway_set) {
-        if (get_gateway_mac(config.dst_mac) < 0) {
-            printf("[!] Gateway MAC not found, using broadcast (This is usually BAD for WAN scanning)\n");
-            memset(config.dst_mac, 0xFF, 6);
+
+    if (!quiet_mode) {
+        printf("[*] Source IP: %s\n", src_ip_str);
+        printf("[*] Interface: %s (Index: %d)\n", config.interface, config.ifindex);
+        printf("[*] Source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+               config.src_mac[0], config.src_mac[1], config.src_mac[2],
+               config.src_mac[3], config.src_mac[4], config.src_mac[5]);
+        
+        if (!config.gateway_set) {
+            if (get_gateway_mac(config.dst_mac) < 0) {
+                printf("[!] Gateway MAC not found, using broadcast (This is usually BAD for WAN scanning)\n");
+                memset(config.dst_mac, 0xFF, 6);
+            }
+        }
+        
+        printf("[*] Destination (Gateway) MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+               config.dst_mac[0], config.dst_mac[1], config.dst_mac[2],
+               config.dst_mac[3], config.dst_mac[4], config.dst_mac[5]);
+    } else {
+        if (!config.gateway_set) {
+            if (get_gateway_mac(config.dst_mac) < 0) {
+                memset(config.dst_mac, 0xFF, 6);
+            }
         }
     }
-    
-    printf("[*] Destination (Gateway) MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-           config.dst_mac[0], config.dst_mac[1], config.dst_mac[2],
-           config.dst_mac[3], config.dst_mac[4], config.dst_mac[5]);
     
 
     for (int i = 0; i < config.senders; i++) {
@@ -349,7 +383,6 @@ int main(int argc, char *argv[]) {
         
         contexts[i].socket_fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
         if (contexts[i].socket_fd < 0) {
-            perror("socket PF_PACKET");
             return 1;
         }
         
@@ -360,12 +393,18 @@ int main(int argc, char *argv[]) {
         memcpy(contexts[i].sll.sll_addr, config.dst_mac, ETH_ALEN);
         
         if (bind(contexts[i].socket_fd, (struct sockaddr *)&contexts[i].sll, sizeof(struct sockaddr_ll)) < 0) {
-            perror("bind");
             return 1;
         }
 
-#ifdef USE_PFRING
-        pthread_create(&sender_threads[i], NULL, pfring_sender_thread, &contexts[i]);
+#ifdef USE_PFRING_ZC
+        char zc_dev_name[128];
+        snprintf(zc_dev_name, sizeof(zc_dev_name), "zc:%s", config.interface);
+        contexts[i].zc_queue = pfring_zc_open_device(config.zc_cluster, zc_dev_name, tx_only, 0);
+        if (contexts[i].zc_queue == NULL) {
+            fprintf(stderr, "[-] pfring_zc_open_device error for thread (PFRING ZEROCOPY LOADED?)%d (errno: %d, %s)\n", i, errno, strerror(errno));
+            return 1;
+        }
+        pthread_create(&sender_threads[i], NULL, pfring_zc_sender_thread, &contexts[i]);
 #else
         pthread_create(&sender_threads[i], NULL, sender_thread, &contexts[i]);
 #endif
@@ -388,7 +427,18 @@ int main(int argc, char *argv[]) {
         receiver_contexts[i].stats = &stats;
         receiver_contexts[i].running = 1;
         receiver_contexts[i].src_ip = src_ip;
+#ifdef USE_PFRING_ZC
+        char zc_dev_name[128];
+        snprintf(zc_dev_name, sizeof(zc_dev_name), "zc:%s", config.interface);
+        receiver_contexts[i].zc_queue = pfring_zc_open_device(config.zc_cluster, zc_dev_name, rx_only, 0);
+        if (receiver_contexts[i].zc_queue == NULL) {
+            fprintf(stderr, "[-] pfring_zc_open_device error for receiver (PFRING ZEROCOPY LOADED?)%d (errno: %d, %s)\n", i, errno, strerror(errno));
+            return 1;
+        }
+        pthread_create(&receiver_threads[i], NULL, pfring_zc_receiver_thread, &receiver_contexts[i]);
+#else
         pthread_create(&receiver_threads[i], NULL, receiver_thread, &receiver_contexts[i]);
+#endif
     }
     
 
@@ -400,11 +450,13 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < config.cooldown_secs; i++) {
         if (stop_signal) break;
-        printf("\r[*] Cooldown: %d/%d seconds", i + 1, config.cooldown_secs);
-        fflush(stdout);
+        if (!quiet_mode) {
+            printf("\r[*] Cooldown: %d/%d seconds", i + 1, config.cooldown_secs);
+            fflush(stdout);
+        }
         sleep(1);
     }
-    printf("\n");
+    if (!quiet_mode) printf("\n");
     
 
     for (int i = 0; i < config.receivers; i++) {
@@ -423,6 +475,9 @@ int main(int argc, char *argv[]) {
     pthread_mutex_unlock(&writer_ctx.mutex);
     pthread_join(writer_tid, NULL);
     
-    printf("[*] Scan completed.\n");
+#ifdef USE_PFRING_ZC
+    pfring_zc_destroy_cluster(config.zc_cluster);
+#endif
+    if (!quiet_mode) printf("[*] Scan completed.\n");
     return 0;
 }

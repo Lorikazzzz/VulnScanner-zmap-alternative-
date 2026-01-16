@@ -1,6 +1,6 @@
 #include "../include/scanner.h"
 
-int get_ifdetails(const char *iface, int *ifindex, uint8_t *mac) {
+int get_ifdetails(const char *iface, int *ifindex, uint8_t *mac) { // retrieves interface index and mac address
     int sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock < 0) return -1;
     
@@ -20,7 +20,26 @@ int get_ifdetails(const char *iface, int *ifindex, uint8_t *mac) {
     return 0;
 }
 
-int get_default_gateway(char *gateway_ip) {
+int get_default_iface(char *iface) { // identifies default network interface name
+    FILE *f = fopen("/proc/net/route", "r");
+    if (!f) return -1;
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        char iface_tmp[64];
+        unsigned long dest, gw, mask;
+        if (sscanf(line, "%s %lx %lx %*x %*d %*d %*d %lx %*d %*d %*d", iface_tmp, &dest, &gw, &mask) >= 3) {
+            if (dest == 0) { 
+                strcpy(iface, iface_tmp);
+                fclose(f);
+                return 0;
+            }
+        }
+    }
+    fclose(f);
+    return -1;
+}
+
+int get_default_gateway(char *gateway_ip) { // determines default gateway ip
     FILE *f = fopen("/proc/net/route", "r");
     if (!f) return -1;
     char line[256];
@@ -41,7 +60,7 @@ int get_default_gateway(char *gateway_ip) {
     return -1;
 }
 
-void force_arp(const char *dst_ip) {
+void force_arp(const char *dst_ip) { //  arp resolution
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) return;
     struct sockaddr_in addr;
@@ -54,13 +73,13 @@ void force_arp(const char *dst_ip) {
     usleep(10000); 
 }
 
-int get_gateway_mac(uint8_t *mac) {
+int get_gateway_mac(uint8_t *mac) { // resolves the hardware address
     char gateway_ip[32];
     if (get_default_gateway(gateway_ip) == 0) {
-        printf("[DEBUG] Gateway IP: %s\n", gateway_ip);
+        if (!quiet_mode) printf("[DEBUG] Gateway IP: %s\n", gateway_ip);
         force_arp(gateway_ip);
     } else {
-        printf("[!] Could not determine default gateway IP\n");
+        // failed to determine gateway
     }
     
     usleep(200000);
@@ -87,7 +106,7 @@ int get_gateway_mac(uint8_t *mac) {
     return -1;
 }
 
-uint32_t get_local_ip(const char *interface) {
+uint32_t get_local_ip(const char *interface) { // finds the local ip
     struct ifaddrs *ifaddr, *ifa;
     if (getifaddrs(&ifaddr) == -1) {
         perror("getifaddrs");
@@ -112,7 +131,7 @@ uint32_t get_local_ip(const char *interface) {
     return ip;
 }
 
-unsigned short calculate_ip_checksum(struct iphdr *iph) {
+unsigned short calculate_ip_checksum(struct iphdr *iph) { // computes checksum for an ip header
     unsigned short *buf = (unsigned short *)iph;
     unsigned int sum = 0;
     iph->check = 0;
@@ -126,7 +145,7 @@ unsigned short calculate_ip_checksum(struct iphdr *iph) {
     return ~sum;
 }
 
-unsigned short calculate_tcp_checksum(struct tcphdr *tcp, uint32_t src_ip, uint32_t dst_ip) {
+unsigned short calculate_tcp_checksum(struct tcphdr *tcp, uint32_t src_ip, uint32_t dst_ip) { // computes the tcp checksum 
     uint32_t sum = 0;
     
     uint16_t tcp_len_bytes = tcp->doff * 4;
@@ -156,7 +175,7 @@ unsigned short calculate_tcp_checksum(struct tcphdr *tcp, uint32_t src_ip, uint3
 
 void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
                       unsigned short src_port, unsigned short dst_port,
-                      uint8_t *src_mac, uint8_t *dst_mac) {
+                      uint8_t *src_mac, uint8_t *dst_mac) { // constructs raw tcp syn packet 
     memset(packet->buffer, 0, PACKET_SIZE);
     
     struct ethhdr *eth = (struct ethhdr *)packet->buffer;

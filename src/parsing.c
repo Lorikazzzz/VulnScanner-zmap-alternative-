@@ -5,7 +5,7 @@ int blacklist_count = 0;
 ip_range_t *whitelist = NULL;
 int whitelist_count = 0;
 
-int is_blacklisted(uint32_t ip_hbo) {
+int is_blacklisted(uint32_t ip_hbo) { 
     if (!blacklist) return 0;
     for (int i = 0; i < blacklist_count; i++) {
         if (ip_hbo >= ntohl(blacklist[i].start) && ip_hbo <= ntohl(blacklist[i].end)) {
@@ -15,7 +15,7 @@ int is_blacklisted(uint32_t ip_hbo) {
     return 0;
 }
 
-int is_whitelisted(uint32_t ip_hbo) {
+int is_whitelisted(uint32_t ip_hbo) { 
     if (!whitelist) return 1;
     for (int i = 0; i < whitelist_count; i++) {
         if (ip_hbo >= ntohl(whitelist[i].start) && ip_hbo <= ntohl(whitelist[i].end)) {
@@ -25,7 +25,7 @@ int is_whitelisted(uint32_t ip_hbo) {
     return 0;
 }
 
-int load_exclusion_list(const char *filename, ip_range_t **list, int *count) {
+int load_exclusion_list(const char *filename, ip_range_t **list, int *count) { 
     FILE *f = fopen(filename, "r");
     if (!f) return 0;
 
@@ -59,15 +59,15 @@ int load_exclusion_list(const char *filename, ip_range_t **list, int *count) {
     return 1;
 }
 
-int load_blacklist(const char *filename) {
+int load_blacklist(const char *filename) { 
     return load_exclusion_list(filename, &blacklist, &blacklist_count);
 }
 
-int load_whitelist(const char *filename) {
+int load_whitelist(const char *filename) { 
     return load_exclusion_list(filename, &whitelist, &whitelist_count);
 }
 
-int parse_port_range(char *range, port_range_t **ranges) {
+int parse_port_range(char *range, port_range_t **ranges) { 
     char *token, *saveptr;
     int count = 0;
     
@@ -127,7 +127,7 @@ int parse_port_range(char *range, port_range_t **ranges) {
     return count;
 }
 
-int parse_ip_range(char *range, ip_range_t **ranges) {
+int parse_ip_range(char *range, ip_range_t **ranges) { 
     if (!range) return -1;
     
     char *slash = strchr(range, '/');
@@ -154,18 +154,6 @@ int parse_ip_range(char *range, ip_range_t **ranges) {
             return -1;
         }
         
-
-
-
-
-
-
-
-
-
-
-        
-
         uint32_t ip_hbo = ntohl(ip);
         uint32_t mask = (bits == 0 ? 0 : (~0U << (32 - bits)));
         uint32_t network = ip_hbo & mask;

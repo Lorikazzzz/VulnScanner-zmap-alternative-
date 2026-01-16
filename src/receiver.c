@@ -2,11 +2,9 @@
 
 
 writer_context_t writer_ctx;
-
-
 pthread_t writer_thread_id; 
 
-void init_writer(const char *filename) {
+void init_writer(const char *filename) { 
     writer_ctx.head = 0;
     writer_ctx.tail = 0;
     writer_ctx.stop = 0;
@@ -15,20 +13,13 @@ void init_writer(const char *filename) {
     
     if (filename) {
         writer_ctx.file = fopen(filename, "a");
-        if (!writer_ctx.file) perror("fopen output");
+        if (!writer_ctx.file) { /* handle error */ }
     } else {
         writer_ctx.file = NULL;
-
-
     }
 }
 
-void push_to_writer(const char *str) {
-
-
-
-
-    
+void push_to_writer(const char *str) { 
     pthread_mutex_lock(&writer_ctx.mutex);
     int next_head = (writer_ctx.head + 1) % WRITER_QUEUE_SIZE;
     if (next_head != writer_ctx.tail) {
@@ -41,7 +32,7 @@ void push_to_writer(const char *str) {
     pthread_mutex_unlock(&writer_ctx.mutex);
 }
 
-void *writer_thread_func(void *arg) {
+void *writer_thread_func(void *arg) { 
     char buffer[65536]; 
     
     while (1) {
@@ -83,10 +74,8 @@ void *writer_thread_func(void *arg) {
     return NULL;
 }
 
-
-
-void handle_packet(unsigned char *packet, int length, stats_t *stats, 
-                   scanner_config_t *config, uint32_t src_ip) {
+void process_packet(const uint8_t *packet, int length, stats_t *stats,
+                   scanner_config_t *config, uint32_t src_ip) { 
     if (length < ETH_HDRLEN) return;
     
     struct ethhdr *eth = (struct ethhdr *)packet;
@@ -144,16 +133,18 @@ void handle_packet(unsigned char *packet, int length, stats_t *stats,
              struct tcphdr *tcph = (struct tcphdr *)(packet + ETH_HDRLEN + (iph->ihl * 4));
              if (ntohs(tcph->source) == 22 || ntohs(tcph->dest) == 22) return;
              
-             printf("\n[DEBUG] Recv Pkt: Proto=%d Src=%s Dst=%s Len=%d\n", iph->protocol, src, dst, length);
-             printf("       TCP Flags: SYN=%d ACK=%d RST=%d FIN=%d Sport=%d Dport=%d\n", 
-                    tcph->syn, tcph->ack, tcph->rst, tcph->fin, ntohs(tcph->source), ntohs(tcph->dest));
+             if (!quiet_mode) {
+                 printf("\n[DEBUG] Recv Pkt: Proto=%d Src=%s Dst=%s Len=%d\n", iph->protocol, src, dst, length);
+                 printf("       TCP Flags: SYN=%d ACK=%d RST=%d FIN=%d Sport=%d Dport=%d\n", 
+                        tcph->syn, tcph->ack, tcph->rst, tcph->fin, ntohs(tcph->source), ntohs(tcph->dest));
+             }
         } else {
-             printf("\n[DEBUG] Recv Pkt: Proto=%d Src=%s Dst=%s Len=%d\n", iph->protocol, src, dst, length);
+             if (!quiet_mode) printf("\n[DEBUG] Recv Pkt: Proto=%d Src=%s Dst=%s Len=%d\n", iph->protocol, src, dst, length);
         }
     }
 }
 
-void *receiver_thread(void *arg) {
+void *receiver_thread(void *arg) { 
     thread_context_t *ctx = (thread_context_t *)arg;
     
     cpu_set_t cpuset;
@@ -163,7 +154,6 @@ void *receiver_thread(void *arg) {
 
     int sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock < 0) {
-        perror("receiver socket");
         return NULL;
     }
 
@@ -173,7 +163,7 @@ void *receiver_thread(void *arg) {
     sll.sll_ifindex = ctx->config->ifindex;
     sll.sll_protocol = htons(ETH_P_ALL);
     if (bind(sock, (struct sockaddr *)&sll, sizeof(sll)) < 0) {
-        perror("receiver bind");
+        // failed bind
     }
 
     struct packet_mreq mreq;
@@ -181,7 +171,7 @@ void *receiver_thread(void *arg) {
     mreq.mr_ifindex = ctx->config->ifindex;
     mreq.mr_type = PACKET_MR_PROMISC;
     if (setsockopt(sock, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0) {
-        perror("setsockopt PROMISC");
+        // failed promisc
     }
 
     struct tpacket_req req;
@@ -192,7 +182,6 @@ void *receiver_thread(void *arg) {
     req.tp_frame_nr = (req.tp_block_size * req.tp_block_nr) / req.tp_frame_size;
 
     if (setsockopt(sock, SOL_PACKET, PACKET_RX_RING, (void *)&req, sizeof(req)) < 0) {
-        perror("setsockopt PACKET_RX_RING");
         close(sock);
         return NULL;
     }
@@ -200,7 +189,6 @@ void *receiver_thread(void *arg) {
     size_t ring_size = req.tp_block_size * req.tp_block_nr;
     unsigned char *ring = mmap(NULL, ring_size, PROT_READ | PROT_WRITE, MAP_SHARED, sock, 0);
     if (ring == MAP_FAILED) {
-        perror("mmap ring");
         close(sock);
         return NULL;
     }
@@ -232,7 +220,7 @@ void *receiver_thread(void *arg) {
 
         while (ctx->running && !stop_signal && (t_hdr->tp_status & TP_STATUS_USER)) {
             unsigned char *pkt = (unsigned char *)t_hdr + t_hdr->tp_mac;
-            handle_packet(pkt, t_hdr->tp_len, ctx->stats, ctx->config, ctx->src_ip);
+            process_packet(pkt, t_hdr->tp_len, ctx->stats, ctx->config, ctx->src_ip);
             
             t_hdr->tp_status = TP_STATUS_KERNEL;
             frame_idx = (frame_idx + 1) % req.tp_frame_nr;

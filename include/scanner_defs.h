@@ -31,6 +31,13 @@
 #include <ifaddrs.h>
 #include <stdatomic.h>
 
+#ifdef USE_PFRING
+#include <pfring.h>
+#endif
+#ifdef USE_PFRING_ZC
+#include <pfring_zc.h>
+#endif
+
 #define MAX_PORTS 65535
 #define MAX_THREADS 256
 #define PACKET_SIZE 128
@@ -40,9 +47,10 @@
 #define ETH_HDRLEN 14
 #define IP4_HDRLEN 20
 #define TCP_HDRLEN 20
-#define BATCH_SIZE 256
+#define BATCH_SIZE 512 //more is better for recv + peak pps but unstable
+#define WRITER_QUEUE_SIZE 1000000
 
-typedef struct {
+typedef struct { //def arg
     char *interface;
     char *source_ip;
     char *target_range;
@@ -59,13 +67,18 @@ typedef struct {
     int cooldown_secs;
     int scan_type;
     int output_format;
+    int quiet;
     uint8_t src_mac[6];
     uint8_t dst_mac[6];
     int ifindex;
     int gateway_set;
+#ifdef USE_PFRING_ZC
+    pfring_zc_cluster *zc_cluster;
+    pfring_zc_buffer_pool *zc_pool;
+#endif
 } scanner_config_t;
 
-typedef struct {
+typedef struct { //scan
     _Atomic unsigned long long packets_sent;
     _Atomic unsigned long long packets_received;
     _Atomic unsigned long long hosts_up;
@@ -78,18 +91,18 @@ typedef struct {
     uint64_t total_packets;
 } stats_t;
 
-typedef struct {
+typedef struct { //port
     unsigned short start;
     unsigned short end;
 } port_range_t;
 
-typedef struct {
+typedef struct { //range 
     uint32_t start;
     uint32_t end;
     uint64_t total_ips;
 } ip_range_t;
 
-typedef struct {
+typedef struct { //thread worker
     port_range_t *port_ranges;
     int num_port_ranges;
     int port_range_idx;
@@ -98,8 +111,6 @@ typedef struct {
     int num_ranges;
     int current_range_idx;
     uint32_t current_ip;
-    
-
     uint64_t global_start_idx;
     uint64_t global_end_idx;
     uint64_t current_global_idx;
@@ -107,22 +118,22 @@ typedef struct {
     int total_ip_ranges;
 } thread_work_t;
 
-typedef struct {
+typedef struct { //packet struct
     unsigned char buffer[PACKET_SIZE];
     size_t length;
     struct sockaddr_in dest_addr;
 } packet_t;
 
 
-#ifdef USE_PFRING
-#include <pfring.h>
-#endif
 
-typedef struct {
+typedef struct { //thread context
     int thread_id;
     int socket_fd;
 #ifdef USE_PFRING
     pfring *ring;
+#endif
+#ifdef USE_PFRING_ZC
+    pfring_zc_queue *zc_queue;
 #endif
     scanner_config_t *config;
     stats_t *stats;
@@ -137,8 +148,7 @@ typedef struct {
 } thread_context_t;
 
 
-#define WRITER_QUEUE_SIZE 100000
-typedef struct {
+typedef struct { //process queue
     char queue[WRITER_QUEUE_SIZE][32]; 
     int head;
     int tail;
@@ -153,5 +163,6 @@ extern writer_context_t writer_ctx;
 extern volatile int stop_signal;
 extern pthread_mutex_t output_mutex;
 extern FILE *output_file_ptr;
+extern int quiet_mode;
 
 #endif

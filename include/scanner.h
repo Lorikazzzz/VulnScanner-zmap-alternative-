@@ -4,19 +4,17 @@
 #include "scanner_defs.h"
 
 
-void distribute_work(ip_range_t *ip_ranges, int num_ip_ranges, 
-                    port_range_t *port_ranges, int num_port_ranges,
-                    thread_context_t *contexts, int num_threads);
+void ip_per_thread(ip_range_t *ip_ranges, int num_ip_ranges, port_range_t *port_ranges, int num_port_ranges,thread_context_t *contexts, int num_threads);
 void *sender_thread(void *arg);
-#ifdef USE_PFRING
-void *pfring_sender_thread(void *arg);
+#ifdef USE_PFRING_ZC
+void *pfring_zc_sender_thread(void *arg);
+void *pfring_zc_receiver_thread(void *arg);
 #endif
 void rate_limit_batch(thread_context_t *ctx, int batch_size);
 
 
 void *receiver_thread(void *arg);
-void handle_packet(unsigned char *packet, int length, stats_t *stats, 
-                   scanner_config_t *config, uint32_t src_ip);
+void process_packet(const uint8_t *packet, int length, stats_t *stats, scanner_config_t *config, uint32_t src_ip);
 void init_writer(const char *filename);
 void push_to_writer(const char *str);
 void *writer_thread_func(void *arg);
@@ -31,15 +29,14 @@ int is_blacklisted(uint32_t ip_hbo);
 int is_whitelisted(uint32_t ip_hbo);
 
 
+int get_default_iface(char *iface);
 int get_ifdetails(const char *iface, int *ifindex, uint8_t *mac);
 int get_default_gateway(char *gateway_ip);
 int get_gateway_mac(uint8_t *mac);
 uint32_t get_local_ip(const char *interface);
 unsigned short calculate_ip_checksum(struct iphdr *iph);
 unsigned short calculate_tcp_checksum(struct tcphdr *tcp, uint32_t src_ip, uint32_t dst_ip);
-void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
-                      unsigned short src_port, unsigned short dst_port,
-                      uint8_t *src_mac, uint8_t *dst_mac);
+void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,unsigned short src_port, unsigned short dst_port,uint8_t *src_mac, uint8_t *dst_mac);
 
 
 uint32_t xorshift32(uint32_t *state);
