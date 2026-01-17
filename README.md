@@ -4,11 +4,11 @@
 Also feel free to suggest things!
 ## Tests
 
-4 scan threads: \
+4 scan threads on a 4 core vps: \
 ![4 scan threads](https://github.com/user-attachments/assets/11573427-4423-43b2-add3-8109786c5dcf)
 
-1 scan thread: \
-![1 Scan thread](https://github.com/user-attachments/assets/00abf201-9450-4a3d-b8cf-7ff6f0f935ce)
+20 Scan threads on millanox connect-X 3 dedi: \
+![1 Scan thread](https://github.com/user-attachments/assets/b0c7eaf2-9162-432d-a7bb-331f8224d48e)
 
 Commands: \
 ![Commands](https://github.com/user-attachments/assets/a5fb779b-7b42-4899-90ab-37655d6b4041)
