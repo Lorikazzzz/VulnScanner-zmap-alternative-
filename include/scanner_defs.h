@@ -41,7 +41,7 @@
 
 #define MAX_PORTS 65535
 #define MAX_THREADS 256
-#define PACKET_SIZE 128
+#define PACKET_SIZE 64
 #define DEFAULT_RATE 10000000
 #define DEFAULT_BANDWIDTH 0
 #define MAX_IPS_PER_THREAD 16777216
@@ -58,7 +58,7 @@
 #define ETH_HDRLEN 14
 #define IP4_HDRLEN 20
 #define TCP_HDRLEN 20
-#define BATCH_SIZE 512 //more is better for recv + peak pps but unstable
+#define BATCH_SIZE 10 //more is better for recv + peak pps but unstable
 #define WRITER_QUEUE_SIZE 1000000
 
 typedef struct { //def arg
@@ -181,3 +181,4 @@ extern FILE *output_file_ptr;
 extern int quiet_mode;
 
 #endif
+
