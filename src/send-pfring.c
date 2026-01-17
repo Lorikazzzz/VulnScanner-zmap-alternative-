@@ -15,7 +15,7 @@ void *pfring_zc_sender_thread(void *arg) {
     packet_t scan_pkt;
     if (ctx->config->scan_method == SCAN_METHOD_UDP) {
         create_udp_packet(&scan_pkt, ctx->src_ip, 0, ctx->src_port, ctx->work.port_ranges[0].start,
-                         ctx->config->src_mac, ctx->config->dst_mac);
+                         ctx->config->src_mac, ctx->config->dst_mac, ctx->config->probe_payload, ctx->config->probe_payload_len);
     } else {
         create_syn_packet(&scan_pkt, ctx->src_ip, 0, 
                          ctx->src_port, ctx->work.port_ranges[0].start,
@@ -23,7 +23,6 @@ void *pfring_zc_sender_thread(void *arg) {
     }
 
     pfring_zc_pkt_buff *zc_buf;
-    uint64_t total_ips = calculate_total_ips(ctx->work.all_ip_ranges, ctx->work.total_ip_ranges);
 
     while (ctx->running && !stop_signal && ctx->work.current_global_idx < ctx->work.global_end_idx) {
         int batch_count = 0;

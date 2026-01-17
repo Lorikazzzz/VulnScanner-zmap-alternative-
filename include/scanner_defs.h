@@ -41,7 +41,7 @@
 
 #define MAX_PORTS 65535
 #define MAX_THREADS 256
-#define PACKET_SIZE 64
+#define PACKET_SIZE 1514
 #define DEFAULT_RATE 10000000
 #define DEFAULT_BANDWIDTH 0
 #define MAX_IPS_PER_THREAD 16777216
@@ -88,6 +88,9 @@ typedef struct { //def arg
     pfring_zc_cluster *zc_cluster;
     pfring_zc_buffer_pool *zc_pool;
 #endif
+    char *probe_args;
+    uint8_t *probe_payload;
+    size_t probe_payload_len;
     struct BlackRock blackrock;
 } scanner_config_t;
 

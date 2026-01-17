@@ -240,7 +240,7 @@ void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
 
 void create_udp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
                        unsigned short src_port, unsigned short dst_port,
-                       uint8_t *src_mac, uint8_t *dst_mac) {
+                       uint8_t *src_mac, uint8_t *dst_mac, uint8_t *payload, size_t payload_len) {
     memset(packet->buffer, 0, PACKET_SIZE);
     
     struct ethhdr *eth = (struct ethhdr *)packet->buffer;
@@ -252,7 +252,7 @@ void create_udp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
     iph->ihl = 5;
     iph->version = 4;
     iph->tos = 0;
-    iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr)); // Empty payload
+    iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + payload_len);
     iph->id = 0;
     iph->frag_off = 0;
     iph->ttl = 64;
@@ -264,15 +264,19 @@ void create_udp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
     struct udphdr *udph = (struct udphdr *)(packet->buffer + sizeof(struct ethhdr) + sizeof(struct iphdr));
     udph->source = htons(src_port);
     udph->dest = htons(dst_port);
-    udph->len = htons(sizeof(struct udphdr));
+    udph->len = htons(sizeof(struct udphdr) + payload_len);
     udph->check = 0; 
     
-    iph->check = calculate_ip_checksum(iph);
-    // UDP Checksum optional but recommended? Masscan sends 0 usually for speed unless specified.
-    // However, modern stacks might drop 0 checksum for IPv6 (not v4).
-    // Let's leave 0 for speed as per masscan default or calculate it if needed.
+    if (payload && payload_len > 0) {
+        if (payload_len > (PACKET_SIZE - (sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr)))) {
+            payload_len = PACKET_SIZE - (sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr));
+        }
+        memcpy(packet->buffer + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr), payload, payload_len);
+    }
     
-    packet->length = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
+    iph->check = calculate_ip_checksum(iph);
+    
+    packet->length = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + payload_len;
     if (packet->length < 60) packet->length = 60;
 }
 

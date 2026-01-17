@@ -1,4 +1,5 @@
 #include "../include/scanner.h"
+#include "util-malloc.h"
 
 
 volatile int stop_signal = 0;
@@ -15,10 +16,12 @@ void help() {
     printf("  -o, --output-file=name      Output file (results will be appended)\n");
     printf("  -b, --blacklist-file=path   File of subnets to exclude\n");
     printf("  -w, --whitelist-file=path   File of subnets to include\n");
+    printf("  --probe-args=args           Arguments to pass to probe module (e.g. text:hello, hex:4142)\n");
     printf("  -r, --rate=pps              Set the send rate in packets/sec (default: %d)\n", DEFAULT_RATE);
     printf("  -B, --bandwidth=bps         Set the send rate in bits/second\n");
     printf("  -i, --interface=name        Network interface to use\n");
     printf("  -S, --source-ip=ip          Source IP address (default: auto)\n");
+    printf("  -M, --probe-module=name     Select probe module (synscan, udp) (alias for -m)\n");
     printf("  -T, --sender-threads=n      Number of sender threads (default: 4)\n");
     printf("  -R, --receivers=n           Number of receiver threads (default: 1)\n");
     printf("  -c, --cooldown-time=secs    How long to wait for responses (default: 5)\n");
@@ -52,11 +55,13 @@ void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
         {"dryrun", no_argument, 0, 'd'},
         {"help", no_argument, 0, 'h'},
         {"scan-method", required_argument, 0, 'm'},
+        {"probe-module", required_argument, 0, 'M'},
+        {"probe-args", required_argument, 0, 1000},
         {0, 0, 0, 0}
     };
     int option_index = 0;
     
-    while ((opt = getopt_long(argc, argv, "i:s:t:p:r:b:w:o:B:S:T:R:G:m:q:h", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "i:s:t:p:r:b:w:o:B:S:T:R:G:m:M:q:h", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'i': config->interface = strdup(optarg); break;
             case 's':
@@ -94,8 +99,9 @@ void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
                 }
                 break;
             }
+            case 'M':
             case 'm': {
-                if (strcmp(optarg, "tcp") == 0 || strcmp(optarg, "syn") == 0) config->scan_method = SCAN_METHOD_SYN;
+                if (strcmp(optarg, "tcp") == 0 || strcmp(optarg, "syn") == 0 || strcmp(optarg, "tcp_synscan") == 0 || strcmp(optarg, "synscan") == 0) config->scan_method = SCAN_METHOD_SYN;
                 else if (strcmp(optarg, "udp") == 0) config->scan_method = SCAN_METHOD_UDP;
                 else {
                     fprintf(stderr, "[-] Unknown scan method: %s (Supported: tcp, udp)\n", optarg);
@@ -109,6 +115,7 @@ void parse_arguments(int argc, char *argv[], scanner_config_t *config) {
                 break;
             }
             case 'h': help_requested = 1; break;
+            case 1000: config->probe_args = strdup(optarg); break;
             default: exit(1);
         }
     }
@@ -229,6 +236,22 @@ int main(int argc, char *argv[]) {
     
     parse_arguments(argc, argv, &config);
     
+    if (config.probe_args) {
+        if (strncmp(config.probe_args, "text:", 5) == 0) {
+            config.probe_payload = (uint8_t *)STRDUP(config.probe_args + 5);
+            config.probe_payload_len = strlen(config.probe_args + 5);
+        } else if (strncmp(config.probe_args, "hex:", 4) == 0) {
+            char *hex = config.probe_args + 4;
+            size_t hex_len = strlen(hex);
+            config.probe_payload_len = hex_len / 2;
+            config.probe_payload = MALLOC(config.probe_payload_len);
+            for (size_t i = 0; i < config.probe_payload_len; i++) {
+                unsigned int byte;
+                sscanf(hex + (i * 2), "%2x", &byte);
+                config.probe_payload[i] = (uint8_t)byte;
+            }
+        }
+    }
 
     init_writer(config.output_file);
     pthread_t writer_tid;
@@ -376,10 +399,12 @@ int main(int argc, char *argv[]) {
     int cluster_id = 10;
     config.zc_cluster = pfring_zc_create_cluster(cluster_id, 1500, 0, 1024 + (config.senders + config.receivers) * BATCH_SIZE, 0, NULL, 0);
     if (config.zc_cluster == NULL) {
+        fprintf(stderr, "[-] pfring_zc_create_cluster error (hugepages not set?)\n");
         return 1;
     }
     config.zc_pool = pfring_zc_create_buffer_pool(config.zc_cluster, 1024 + (config.senders + config.receivers) * BATCH_SIZE);
     if (config.zc_pool == NULL) {
+        fprintf(stderr, "[-] pfring_zc_create_buffer_pool error\n");
         return 1;
     }
 #endif
@@ -424,8 +449,10 @@ int main(int argc, char *argv[]) {
         gettimeofday(&contexts[i].last_send_time, NULL);
         contexts[i].current_state = (i + 1) * 1234567 + (uint32_t)time(NULL);
         
+#ifndef USE_PFRING_ZC
         contexts[i].socket_fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
         if (contexts[i].socket_fd < 0) {
+            fprintf(stderr, "[-] socket(PF_PACKET) error for thread %d (errno: %d, %s)\n", i, errno, strerror(errno));
             return 1;
         }
         
@@ -436,8 +463,10 @@ int main(int argc, char *argv[]) {
         memcpy(contexts[i].sll.sll_addr, config.dst_mac, ETH_ALEN);
         
         if (bind(contexts[i].socket_fd, (struct sockaddr *)&contexts[i].sll, sizeof(struct sockaddr_ll)) < 0) {
+            fprintf(stderr, "[-] bind() error for thread %d (errno: %d, %s)\n", i, errno, strerror(errno));
             return 1;
         }
+#endif
 
 #ifdef USE_PFRING_ZC
         char zc_dev_name[128];
@@ -487,7 +516,9 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < config.senders; i++) {
         pthread_join(sender_threads[i], NULL);
+#ifndef USE_PFRING_ZC
         close(contexts[i].socket_fd);
+#endif
     }
     
 

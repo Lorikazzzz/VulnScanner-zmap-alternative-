@@ -37,7 +37,7 @@ uint32_t get_local_ip(const char *interface);
 unsigned short calculate_ip_checksum(struct iphdr *iph);
 unsigned short calculate_tcp_checksum(struct tcphdr *tcp, uint32_t src_ip, uint32_t dst_ip);
 void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,unsigned short src_port, unsigned short dst_port,uint8_t *src_mac, uint8_t *dst_mac);
-void create_udp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,unsigned short src_port, unsigned short dst_port,uint8_t *src_mac, uint8_t *dst_mac);
+void create_udp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,unsigned short src_port, unsigned short dst_port,uint8_t *src_mac, uint8_t *dst_mac, uint8_t *payload, size_t payload_len);
 
 
 uint32_t xorshift32(uint32_t *state);

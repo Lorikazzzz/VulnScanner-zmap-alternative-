@@ -104,7 +104,7 @@ void *sender_thread(void *arg) {
     packet_t scan_pkt;
     if (ctx->config->scan_method == SCAN_METHOD_UDP) {
         create_udp_packet(&scan_pkt, ctx->src_ip, 0, ctx->src_port, ctx->work.port_ranges[0].start,
-                         ctx->config->src_mac, ctx->config->dst_mac);
+                         ctx->config->src_mac, ctx->config->dst_mac, ctx->config->probe_payload, ctx->config->probe_payload_len);
     } else {
         // Default to SYN
         create_syn_packet(&scan_pkt, ctx->src_ip, 0, 
