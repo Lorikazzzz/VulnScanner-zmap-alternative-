@@ -108,8 +108,16 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
             atomic_fetch_add(&stats->ports_open, 1);
             
             char src_ip_str[16];
-            int_to_ip(iph->saddr, src_ip_str);
-            push_to_writer(src_ip_str);
+            uint32_t ip_hbo = ntohl(iph->saddr);
+            
+            /* Atomic check-and-set in bitset */
+            uint8_t bit = 1 << (ip_hbo & 7);
+            uint8_t *byte_ptr = &seen_ips[ip_hbo >> 3];
+            
+            if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
+                int_to_ip(iph->saddr, src_ip_str);
+                push_to_writer(src_ip_str);
+            }
             
         } else if (tcph->rst) {
             atomic_fetch_add(&stats->rst_replies, 1);
@@ -121,8 +129,15 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
         atomic_fetch_add(&stats->ports_open, 1);
         
         char src_ip_str[16];
-        int_to_ip(iph->saddr, src_ip_str);
-        push_to_writer(src_ip_str);
+        uint32_t ip_hbo = ntohl(iph->saddr);
+        
+        uint8_t bit = 1 << (ip_hbo & 7);
+        uint8_t *byte_ptr = &seen_ips[ip_hbo >> 3];
+        
+        if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
+            int_to_ip(iph->saddr, src_ip_str);
+            push_to_writer(src_ip_str);
+        }
         
     } else if (iph->protocol == IPPROTO_ICMP) {
         struct icmphdr *icmph = (struct icmphdr *)(packet + offset + (iph->ihl * 4));
@@ -197,7 +212,9 @@ void *receiver_thread(void *arg) {
     setsockopt(sock, SOL_PACKET, PACKET_IGNORE_OUTGOING, &one, sizeof(one));
     
     int fanout_arg = (1 | (PACKET_FANOUT_HASH << 16));
-    setsockopt(sock, SOL_PACKET, PACKET_FANOUT, &fanout_arg, sizeof(fanout_arg));
+    if (setsockopt(sock, SOL_PACKET, PACKET_FANOUT, &fanout_arg, sizeof(fanout_arg)) < 0) {
+        if (!quiet_mode) fprintf(stderr, "[!] Warning: setsockopt(PACKET_FANOUT) failed (errno %d: %s). Duplicate reception may occur at OS level.\n", errno, strerror(errno));
+    }
 
     unsigned int frame_idx = 0;
     while (ctx->running && !stop_signal) {

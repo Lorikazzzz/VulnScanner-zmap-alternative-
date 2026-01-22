@@ -182,6 +182,10 @@ extern volatile int stop_signal;
 extern pthread_mutex_t output_mutex;
 extern FILE *output_file_ptr;
 extern int quiet_mode;
+extern uint8_t *seen_ips;
+
+#define IS_IP_SEEN(ip) (seen_ips[(uint32_t)(ip) >> 3] & (1 << ((uint32_t)(ip) & 7)))
+#define MARK_IP_SEEN(ip) (seen_ips[(uint32_t)(ip) >> 3] |= (1 << ((uint32_t)(ip) & 7)))
 
 #endif
 

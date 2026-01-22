@@ -6,6 +6,7 @@ volatile int stop_signal = 0;
 pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
 FILE *output_file_ptr = NULL;
 int quiet_mode = 0;
+uint8_t *seen_ips = NULL;
 
 
 extern pthread_t writer_thread_id; 
@@ -282,6 +283,13 @@ int main(int argc, char *argv[]) {
         if (!quiet_mode) printf("[*] Dry run mode - no packets will be sent\n");
         return 0;
     }
+
+    /* Allocate 512 MiB for de-duplication bitset */
+    seen_ips = (uint8_t *)calloc(1ULL << 29, 1);
+    if (seen_ips == NULL) {
+        fprintf(stderr, "[-] Failed to allocate de-duplication bitset (512 MiB)\n");
+        return 1;
+    }
     
     port_range_t *port_ranges = NULL;
     int num_port_ranges = parse_port_range(config.port_range, &port_ranges);
@@ -323,7 +331,6 @@ int main(int argc, char *argv[]) {
     
     // Performance self-test for shuffle uniqueness (spot checks)
     if (!quiet_mode && total_packets > 1) {
-        printf("[*] Verifying shuffle integrity...\n");
         uint64_t v1 = blackrock_shuffle(&config.blackrock, 0);
         uint64_t v2 = blackrock_shuffle(&config.blackrock, total_packets - 1);
         if (v1 >= total_packets || v2 >= total_packets) {
@@ -553,6 +560,7 @@ int main(int argc, char *argv[]) {
     pfring_zc_destroy_cluster(config.zc_cluster);
 #endif
     if (!quiet_mode) printf("[*] Scan completed.\n");
+    if (seen_ips) free(seen_ips);
     return 0;
 }
 
