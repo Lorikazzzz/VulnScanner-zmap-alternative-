@@ -74,6 +74,16 @@ void *writer_thread_func(void *arg) {
     return NULL;
 }
 
+static inline uint32_t hash_ip_port(uint32_t ip, uint16_t port) {
+    uint32_t h = ip ^ port;
+    h ^= h >> 16;
+    h *= 0x85ebca6b;
+    h ^= h >> 13;
+    h *= 0xc2b2ae35;
+    h ^= h >> 16;
+    return h;
+}
+
 void process_packet(const uint8_t *packet, int length, stats_t *stats,
                    scanner_config_t *config, uint32_t src_ip) { 
     if (length < ETH_HDRLEN) return;
@@ -112,10 +122,16 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
             char out_str[32];
             
             if (config->is_multiport) {
-                char ip_str[16];
-                int_to_ip(iph->saddr, ip_str);
-                snprintf(out_str, sizeof(out_str), "%s:%u", ip_str, port_hbo);
-                push_to_writer(out_str);
+                uint32_t h = hash_ip_port(ip_hbo, port_hbo);
+                uint8_t bit = 1 << (h & 7);
+                uint8_t *byte_ptr = &seen_ips[h >> 3];
+                
+                if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
+                    char ip_str[16];
+                    int_to_ip(iph->saddr, ip_str);
+                    snprintf(out_str, sizeof(out_str), "%s:%u", ip_str, port_hbo);
+                    push_to_writer(out_str);
+                }
             } else {
                 /* Atomic check-and-set in bitset */
                 uint8_t bit = 1 << (ip_hbo & 7);
@@ -130,6 +146,7 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
         } else if (tcph->rst) {
             atomic_fetch_add(&stats->rst_replies, 1);
         }
+    } else if (iph->protocol == IPPROTO_UDP) {
         struct udphdr *udph = (struct udphdr *)(packet + offset + (iph->ihl * 4));
         atomic_fetch_add(&stats->packets_received, 1);
         atomic_fetch_add(&stats->hosts_up, 1); 
@@ -140,10 +157,16 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
         char out_str[32];
 
         if (config->is_multiport) {
-            char ip_str[16];
-            int_to_ip(iph->saddr, ip_str);
-            snprintf(out_str, sizeof(out_str), "%s:%u", ip_str, port_hbo);
-            push_to_writer(out_str);
+            uint32_t h = hash_ip_port(ip_hbo, port_hbo);
+            uint8_t bit = 1 << (h & 7);
+            uint8_t *byte_ptr = &seen_ips[h >> 3];
+            
+            if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
+                char ip_str[16];
+                int_to_ip(iph->saddr, ip_str);
+                snprintf(out_str, sizeof(out_str), "%s:%u", ip_str, port_hbo);
+                push_to_writer(out_str);
+            }
         } else {
             uint8_t bit = 1 << (ip_hbo & 7);
             uint8_t *byte_ptr = &seen_ips[ip_hbo >> 3];
