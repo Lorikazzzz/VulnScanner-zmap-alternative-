@@ -321,6 +321,7 @@ int main(int argc, char *argv[]) {
     }
     uint64_t total_packets = total_ips * total_ports;
     stats.total_packets = total_packets;
+    config.is_multiport = (total_ports > 1);
     
     if (total_packets == 0) {
         fprintf(stderr, "[-] Nothing to scan\n");

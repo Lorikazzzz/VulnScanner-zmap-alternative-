@@ -107,36 +107,51 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
             atomic_fetch_add(&stats->hosts_up, 1);
             atomic_fetch_add(&stats->ports_open, 1);
             
-            char src_ip_str[16];
             uint32_t ip_hbo = ntohl(iph->saddr);
+            uint16_t port_hbo = ntohs(tcph->source);
+            char out_str[32];
             
-            /* Atomic check-and-set in bitset */
-            uint8_t bit = 1 << (ip_hbo & 7);
-            uint8_t *byte_ptr = &seen_ips[ip_hbo >> 3];
-            
-            if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
-                int_to_ip(iph->saddr, src_ip_str);
-                push_to_writer(src_ip_str);
+            if (config->is_multiport) {
+                char ip_str[16];
+                int_to_ip(iph->saddr, ip_str);
+                snprintf(out_str, sizeof(out_str), "%s:%u", ip_str, port_hbo);
+                push_to_writer(out_str);
+            } else {
+                /* Atomic check-and-set in bitset */
+                uint8_t bit = 1 << (ip_hbo & 7);
+                uint8_t *byte_ptr = &seen_ips[ip_hbo >> 3];
+                
+                if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
+                    int_to_ip(iph->saddr, out_str);
+                    push_to_writer(out_str);
+                }
             }
             
         } else if (tcph->rst) {
             atomic_fetch_add(&stats->rst_replies, 1);
         }
-    } else if (iph->protocol == IPPROTO_UDP) {
-        // Any UDP data back is a hit
+        struct udphdr *udph = (struct udphdr *)(packet + offset + (iph->ihl * 4));
         atomic_fetch_add(&stats->packets_received, 1);
-        atomic_fetch_add(&stats->hosts_up, 1); // Maybe?
+        atomic_fetch_add(&stats->hosts_up, 1); 
         atomic_fetch_add(&stats->ports_open, 1);
         
-        char src_ip_str[16];
         uint32_t ip_hbo = ntohl(iph->saddr);
-        
-        uint8_t bit = 1 << (ip_hbo & 7);
-        uint8_t *byte_ptr = &seen_ips[ip_hbo >> 3];
-        
-        if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
-            int_to_ip(iph->saddr, src_ip_str);
-            push_to_writer(src_ip_str);
+        uint16_t port_hbo = ntohs(udph->source);
+        char out_str[32];
+
+        if (config->is_multiport) {
+            char ip_str[16];
+            int_to_ip(iph->saddr, ip_str);
+            snprintf(out_str, sizeof(out_str), "%s:%u", ip_str, port_hbo);
+            push_to_writer(out_str);
+        } else {
+            uint8_t bit = 1 << (ip_hbo & 7);
+            uint8_t *byte_ptr = &seen_ips[ip_hbo >> 3];
+            
+            if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
+                int_to_ip(iph->saddr, out_str);
+                push_to_writer(out_str);
+            }
         }
         
     } else if (iph->protocol == IPPROTO_ICMP) {

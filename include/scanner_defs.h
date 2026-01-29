@@ -92,6 +92,7 @@ typedef struct { //def arg
     uint8_t *probe_payload;
     size_t probe_payload_len;
     struct BlackRock blackrock;
+    int is_multiport;
 } scanner_config_t;
 
 typedef struct { //scan
