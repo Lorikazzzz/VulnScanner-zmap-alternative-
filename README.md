@@ -1,7 +1,9 @@
-# An powerfull alternative to ZMap
+# An powerful alternative to ZMap
 
 **This project is still under development so it will improve overtime** \
 Also feel free to suggest things!
+Another also, This project is made with mix of ai and masscan and zmap's internal codes.
+
 ## Tests
 
 4 scan threads on a 4 core vps: \
