@@ -30,7 +30,7 @@ void *pfring_zc_sender_thread(void *arg) {
         while (batch_count < BATCH_SIZE && ctx->work.current_global_idx < ctx->work.global_end_idx && !stop_signal) {
             zc_buf = pfring_zc_get_packet_handle(ctx->config->zc_pool);
             if (zc_buf == NULL) {
-                // Out of buffers, flush and wait   
+                
                 pfring_zc_sync_queue(ctx->zc_queue, tx_only);
                 usleep(1);
                 continue;
@@ -45,7 +45,7 @@ void *pfring_zc_sender_thread(void *arg) {
             
             ctx->work.current_global_idx++;
 
-            // Port selection
+            
             uint16_t current_port = 0;
             uint64_t p_acc = 0;
             for (int p = 0; p < ctx->work.num_port_ranges; p++) {

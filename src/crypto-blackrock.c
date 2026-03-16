@@ -1,52 +1,4 @@
-/*
-    BlackRock cipher
 
-    (h/t Marsh Ray @marshray for this idea)
-
-    This is a randomization/reshuffling function based on a crypto
-    "Feistel network" as described in the paper:
-
-    'Ciphers with Arbitrary Finite Domains'
-        by John Black and Phillip Rogaway
-        http://www.cs.ucdavis.edu/~rogaway/papers/subset.pdf
-
-    This is a crypto-like construction that encrypts an arbitrary sized
-    range. Given a number in the range [0..9999], it'll produce a mapping
-    to a distinct different number in the same range (and back again).
-    In other words, it randomizes the order of numbers in a sequence.
-
-    For example, it can be used to  randomize the sequence [0..9]:
-
-     0 ->      6
-     1 ->      4
-     2 ->      8
-     3 ->      1
-     4 ->      9
-     5 ->      3
-     6 ->      0
-     7 ->      5
-     8 ->      2
-     9 ->      7
-
-    As you can see on the right hand side, the numbers are in random
-    order, and they don't repeat.
-
-    This is create for port scanning. We can take an index variable
-    and increment it during a scan, then use this function to
-    randomize it, yet be assured that we've probed every IP and port
-    within the range.
-
-    The cryptographic strength of this construction depends upon the
-    number of rounds, and the exact nature of the inner "READ()" function.
-    Because it's a Feistel network, that "READ()" function can be almost
-    anything.
-
-    We don't care about cryptographic strength, just speed, so we are
-    using a trivial READ() function.
-
-    This is a class of "format-preserving encryption". There are
-    probably better constructions than what I'm using.
-*/
 #include "crypto-blackrock.h"
 #include "pixie-timer.h"
 #include "util-malloc.h"
@@ -62,9 +14,7 @@
 #define inline _inline
 #endif
 
-/***************************************************************************
- * It's an s-box. You gotta have an s-box
- ***************************************************************************/
+
 const unsigned char sbox[256] = {
 0x91, 0x58, 0xb3, 0x31, 0x6c, 0x33, 0xda, 0x88,
 0x57, 0xdd, 0x8c, 0xf2, 0x29, 0x5a, 0x08, 0x9f,
@@ -103,16 +53,13 @@ const unsigned char sbox[256] = {
 0xf4, 0xc6, 0xbc, 0xa2, 0x51, 0x58, 0xe8, 0xae,
 };
 
-/***************************************************************************
- ***************************************************************************/
+
 void
 blackrock_init(struct BlackRock *br, uint64_t range, uint64_t seed, unsigned rounds)
 {
     double foo = sqrt(range * 1.0);
 
-    /* This algorithm gets very non-random at small numbers, so I'm going
-     * to try to fix some constants here to make it work. It doesn't have
-     * to be good, since it's kinda pointless having ranges this small */
+    
     switch (range) {
         case 0:
             br->a = 0;
@@ -157,10 +104,7 @@ blackrock_init(struct BlackRock *br, uint64_t range, uint64_t seed, unsigned rou
 }
 
 
-/***************************************************************************
- * The inner round/mixer function. In DES, it's a series of S-box lookups,
- * which 
- ***************************************************************************/
+
 static inline uint64_t
 READ(uint64_t r, uint64_t R, uint64_t seed)
 {
@@ -181,14 +125,7 @@ READ(uint64_t r, uint64_t R, uint64_t seed)
 }
 
 
-/***************************************************************************
- *
- * NOTE:
- *  the names in this function are cryptic in order to match as closely
- *  as possible the pseudocode in the following paper:
- *      http://www.cs.ucdavis.edu/~rogaway/papers/subset.pdf
- * Read that paper in order to understand this code.
- ***************************************************************************/
+
 static inline uint64_t
 ENCRYPT(unsigned r, uint64_t a, uint64_t b, uint64_t m, uint64_t seed)
 {
@@ -215,8 +152,7 @@ ENCRYPT(unsigned r, uint64_t a, uint64_t b, uint64_t m, uint64_t seed)
     }
 }
 
-/***************************************************************************
- ***************************************************************************/
+
 static inline uint64_t
 UNENCRYPT(unsigned r, uint64_t a, uint64_t b, uint64_t m, uint64_t seed)
 {
@@ -262,8 +198,7 @@ UNENCRYPT(unsigned r, uint64_t a, uint64_t b, uint64_t m, uint64_t seed)
     return a * R + L;
 }
 
-/***************************************************************************
- ***************************************************************************/
+
 uint64_t
 blackrock_shuffle(const struct BlackRock *br, uint64_t m)
 {
@@ -276,8 +211,7 @@ blackrock_shuffle(const struct BlackRock *br, uint64_t m)
     return c;
 }
 
-/***************************************************************************
- ***************************************************************************/
+
 uint64_t
 blackrock_unshuffle(const struct BlackRock *br, uint64_t m)
 {
@@ -291,9 +225,7 @@ blackrock_unshuffle(const struct BlackRock *br, uint64_t m)
 }
 
 
-/***************************************************************************
- * This function called only during selftest/regression-test.
- ***************************************************************************/
+
 static unsigned
 blackrock_verify(struct BlackRock *br, uint64_t max)
 {
@@ -302,19 +234,17 @@ blackrock_verify(struct BlackRock *br, uint64_t max)
     unsigned is_success = 1;
     uint64_t range = br->range;
 
-    /* Allocate a list of 1-byte counters */
+    
     list = CALLOC(1, (size_t)((range<max)?range:max));
     
-    /* For all numbers in the range, verify increment the counter for
-     * the output. */
+    
     for (i=0; i<range; i++) {
         uint64_t x = blackrock_shuffle(br, i);
         if (x < max)
             list[x]++;
     }
 
-    /* Now check the output to make sure that every counter is set exactly
-     * to the value of '1'. */
+    
     for (i=0; i<max && i<range; i++) {
         if (list[i] != 1)
             is_success = 0;
@@ -325,8 +255,7 @@ blackrock_verify(struct BlackRock *br, uint64_t max)
     return is_success;
 }
 
-/***************************************************************************
- ***************************************************************************/
+
 void
 blackrock_benchmark(unsigned rounds)
 {
@@ -341,18 +270,14 @@ blackrock_benchmark(unsigned rounds)
     printf("rounds = %u\n", rounds);
     blackrock_init(&br, range, 1, rounds);
 
-    /*
-     * Time the algorithm
-     */
+    
     start = pixie_nanotime();
     for (i=0; i<ITERATIONS; i++) {
         result += blackrock_shuffle(&br, i);
     }
     stop = pixie_nanotime();
 
-    /*
-     * Print the results
-     */
+    
     if (result) {
         double elapsed = ((double)(stop - start))/(1000000000.0);
         double rate = ITERATIONS/elapsed;
@@ -367,21 +292,14 @@ blackrock_benchmark(unsigned rounds)
 
 }
 
-/***************************************************************************
- ***************************************************************************/
+
 int
 blackrock_selftest(void)
 {
     uint64_t i;
     uint64_t range;
 
-    /* @marshray
-     * Basic test of decryption. I take the index, encrypt it, then decrypt it,
-     * which means I should get the original index back again. Only, it's not
-     * working. The decryption fails. The reason it's failing is obvious -- I'm
-     * just not seeing it though. The error is probably in the 'UNENCRYPT()'
-     * function above.
-     */
+    
     {
         struct BlackRock br;
         
@@ -392,7 +310,7 @@ blackrock_selftest(void)
             result = blackrock_shuffle(&br, i);
             result2 = blackrock_unshuffle(&br, result);
             if (i != result2)
-                return 1; /*fail*/
+                return 1; 
         }
 
     }
@@ -412,9 +330,9 @@ blackrock_selftest(void)
         is_success = blackrock_verify(&br, range);
         if (!is_success) {
             fprintf(stderr, "BLACKROCK: randomization failed\n");
-            return 1; /*fail*/
+            return 1; 
         }
     }
 
-    return 0; /*success*/
+    return 0; 
 }

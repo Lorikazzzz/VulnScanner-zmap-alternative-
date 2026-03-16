@@ -1,10 +1,4 @@
-/*
-    Wrappers around the malloc()/heap functions to `abort()` the program in
-    case of running out of memory.
- 
-    Also, defines a REALLOCARRAY() function that checks for integer
-    overflow before trying to allocate memory.
-*/
+
 #ifndef UTIL_MALLOC_H
 #define UTIL_MALLOC_H
 #include <stdio.h>

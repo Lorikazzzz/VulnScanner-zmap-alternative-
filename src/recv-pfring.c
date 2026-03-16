@@ -22,9 +22,9 @@ void *pfring_zc_receiver_thread(void *arg) {
             unsigned char *pkt = pfring_zc_pkt_buff_data(zc_buf, ctx->zc_queue);
             process_packet(pkt, zc_buf->len, ctx->stats, ctx->config, ctx->src_ip);
             
-            // Re-use or get new handle if needed. ZC recv swaps pointers.
+            
         } else {
-            // Optional: short sleep or poll if idle
+            
             usleep(1);
         }
     }

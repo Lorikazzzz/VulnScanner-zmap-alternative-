@@ -1,20 +1,11 @@
-/*
-    safe C library functions
 
-    This upgrades unsafe C functions like "strcpy()" to safer equivalents,
-    like "safe_strcpy()".
-
-    NOTE: This is for maintaining a policy of "no unsafe functions"
-*/
 #include "util-safefunc.h"
 #include <errno.h>
 #include <ctype.h>
 #include <errno.h>
 #include <string.h>
 
-/**
- * Case-insensitive memcmp()
- */
+
 #ifdef __GNUC__
 int
 memcasecmp(const void *lhs, const void *rhs, size_t length)
@@ -28,9 +19,7 @@ memcasecmp(const void *lhs, const void *rhs, size_t length)
 }
 #endif
 
-/**
- * Safe version of `strcpy()`
- */
+
 void
 safe_strcpy(char *dst, size_t sizeof_dst, const char *src)
 {

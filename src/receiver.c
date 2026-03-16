@@ -13,7 +13,7 @@ void init_writer(const char *filename) {
     
     if (filename) {
         writer_ctx.file = fopen(filename, "a");
-        if (!writer_ctx.file) { /* handle error */ }
+        if (!writer_ctx.file) {  }
     } else {
         writer_ctx.file = NULL;
     }
@@ -23,8 +23,8 @@ void push_to_writer(const char *str) {
     pthread_mutex_lock(&writer_ctx.mutex);
     int next_head = (writer_ctx.head + 1) % WRITER_QUEUE_SIZE;
     if (next_head != writer_ctx.tail) {
-        strncpy(writer_ctx.queue[writer_ctx.head], str, 31);
-        writer_ctx.queue[writer_ctx.head][31] = '\0';
+        strncpy(writer_ctx.queue[writer_ctx.head], str, 63);
+        writer_ctx.queue[writer_ctx.head][63] = '\0';
         writer_ctx.head = next_head;
         pthread_cond_signal(&writer_ctx.cond);
     } 
@@ -119,7 +119,7 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
             
             uint32_t ip_hbo = ntohl(iph->saddr);
             uint16_t port_hbo = ntohs(tcph->source);
-            char out_str[32];
+            char out_str[64];
             
             if (config->is_multiport) {
                 uint32_t h = hash_ip_port(ip_hbo, port_hbo);
@@ -133,7 +133,7 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
                     push_to_writer(out_str);
                 }
             } else {
-                /* Atomic check-and-set in bitset */
+                
                 uint8_t bit = 1 << (ip_hbo & 7);
                 uint8_t *byte_ptr = &seen_ips[ip_hbo >> 3];
                 
@@ -154,7 +154,7 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
         
         uint32_t ip_hbo = ntohl(iph->saddr);
         uint16_t port_hbo = ntohs(udph->source);
-        char out_str[32];
+        char out_str[64];
 
         if (config->is_multiport) {
             uint32_t h = hash_ip_port(ip_hbo, port_hbo);
@@ -179,7 +179,28 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
         
     } else if (iph->protocol == IPPROTO_ICMP) {
         struct icmphdr *icmph = (struct icmphdr *)(packet + offset + (iph->ihl * 4));
-        if (icmph->type == ICMP_DEST_UNREACH) {
+        if (icmph->type == ICMP_ECHOREPLY) {
+            atomic_fetch_add(&stats->packets_received, 1);
+            atomic_fetch_add(&stats->hosts_up, 1); 
+            atomic_fetch_add(&stats->discovery_hits, 1);
+            
+            uint32_t ip_hbo = ntohl(iph->saddr);
+            char out_str[64];
+            
+            uint8_t bit = 1 << (ip_hbo & 7);
+            uint8_t *byte_ptr = &seen_ips[ip_hbo >> 3];
+            
+            if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
+                int_to_ip(iph->saddr, out_str);
+                push_to_writer(out_str);
+            }
+            if (config->icmp_prescan && alive_ips) {
+                 if (!(atomic_fetch_or((_Atomic uint8_t *)&alive_ips[ip_hbo >> 3], 1 << (ip_hbo & 7)) & (1 << (ip_hbo & 7)))) {
+                     uint64_t head = atomic_fetch_add(&alive_queue_head, 1);
+                     atomic_store_explicit(&alive_queue[head % ALIVE_QUEUE_SIZE], ip_hbo, memory_order_release);
+                 }
+            }
+        } else if (icmph->type == ICMP_DEST_UNREACH) {
             atomic_fetch_add(&stats->icmp_unreach, 1);
         }
     }
@@ -205,7 +226,7 @@ void *receiver_thread(void *arg) {
     sll.sll_ifindex = ctx->config->ifindex;
     sll.sll_protocol = htons(ETH_P_ALL);
     if (bind(sock, (struct sockaddr *)&sll, sizeof(sll)) < 0) {
-        // failed bind
+        
     }
 
     struct packet_mreq mreq;
@@ -213,7 +234,7 @@ void *receiver_thread(void *arg) {
     mreq.mr_ifindex = ctx->config->ifindex;
     mreq.mr_type = PACKET_MR_PROMISC;
     if (setsockopt(sock, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0) {
-        // failed promisc
+        
     }
 
     struct tpacket_req req;

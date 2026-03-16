@@ -1,19 +1,4 @@
-/*
-    portability: time
 
-    Since this program runs on both Linux and Windows, I need a portable
-    way to get a high-resolution timer.
-
-    NOTE: The time I'm looking for is "elapsed time" not "wall clock"
-    time. In other words, if you put the system to sleep and wake it
-    up a day later, this function should see no change, since time
-    wasn't elapsing while the system was asleep.
-
-    Reference:
-    http://www.python.org/dev/peps/pep-0418/#monotonic-clocks
-    http://www.brain-dump.org/blog/entry/107
-
-*/
 #include "pixie-timer.h"
 
 #include <time.h>
@@ -99,8 +84,8 @@ win_clock_gettime(int X, struct timeval *tv)
 uint64_t
 pixie_gettime(void)
 {
-    //struct timeval tv;
-    //clock_gettime(0, &tv);
+    
+    
 
     uint64_t time1 = 0, freq = 0;
     double seconds;
@@ -112,7 +97,7 @@ pixie_gettime(void)
 
     return (uint64_t)(seconds * 1000000.0);
 
-    //return (uint64_t)tv.tv_sec * 1000000UL + tv.tv_usec;
+    
 }
 uint64_t
 pixie_nanotime(void)
@@ -134,16 +119,7 @@ pixie_mssleep(unsigned waitTime)
 void
 pixie_usleep(uint64_t waitTime)
 {
-    /*
-    uint64_t time1 = 0, time2 = 0, freq = 0;
-
-    QueryPerformanceCounter((LARGE_INTEGER *) &time1);
-    QueryPerformanceFrequency((LARGE_INTEGER *)&freq);
-
-    do {
-        QueryPerformanceCounter((LARGE_INTEGER *) &time2);
-    } while((time2-time1) < waitTime);
-    */
+    
 
     uint64_t start;
 
@@ -181,7 +157,7 @@ again:
         goto again;
     }
 
-    //usleep(microseconds);
+    
 }
 uint64_t
 pixie_gettime(void)
@@ -190,10 +166,10 @@ pixie_gettime(void)
     struct timespec tv;
 
 #if defined(CLOCK_UPTIME_RAW)
-    /* macOS: ignores time when suspended/sleep */
+    
     x = clock_gettime(CLOCK_UPTIME_RAW, &tv);
-//#elif defined(CLOCK_MONOTONIC_RAW)
-//    x = clock_gettime(CLOCK_MONOTONIC_RAW, &tv);
+
+
 #else
     x = clock_gettime(CLOCK_MONOTONIC, &tv);
 #endif
@@ -220,7 +196,7 @@ pixie_nanotime(void)
 
     return tv.tv_sec * 1000000000 + tv.tv_nsec;
 }
-#elif defined(__MACH__) || defined(__FreeBSD__) /* works for Apple */
+#elif defined(__MACH__) || defined(__FreeBSD__) 
 #include <unistd.h>
 #include <mach/mach_time.h>
 
@@ -235,7 +211,7 @@ void pixie_usleep(uint64_t microseconds)
     }
 
     nanosleep(&t, 0);
-    //usleep(microseconds);
+    
 }
 void
 pixie_mssleep(unsigned milliseconds)
@@ -254,19 +230,7 @@ pixie_nanotime(void)
 }
 #endif
 
-/*
- * Timing is incredibly importatn to masscan because we need to throttle
- * how fast we spew packets. Every platofrm has slightly different timing
- * even given standard APIs. We need to make sure we have an accurate
- * timing function.
- *
- * This function tests betwe [0.9, 1.9] the expected results. I want something
- * tight, like [0.99,1.01] (plus/minus 1%), but unfortunately automated
- * testing platforms, like GitHub Actions, are overloaded, so when I wait
- * for half a second, they might actually wait for 0.7 seconds, causing
- * this test to fail. Thus, I have to greatly expand the range that passes
- * this test.
- */
+
 int pixie_time_selftest(void)
 {
     static const uint64_t duration = 456789;

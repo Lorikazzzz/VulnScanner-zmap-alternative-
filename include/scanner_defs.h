@@ -46,7 +46,6 @@
 #define DEFAULT_BANDWIDTH 0
 #define MAX_IPS_PER_THREAD 16777216
 
-// Scan Methods
 #define SCAN_METHOD_SYN 0
 #define SCAN_METHOD_ACK 1
 #define SCAN_METHOD_FIN 2
@@ -58,10 +57,36 @@
 #define ETH_HDRLEN 14
 #define IP4_HDRLEN 20
 #define TCP_HDRLEN 20
-#define BATCH_SIZE 10 //more is better for recv + peak pps but unstable
+#define BATCH_SIZE 10 
 #define WRITER_QUEUE_SIZE 1000000
+#define ALIVE_QUEUE_SIZE 2000000
 
-typedef struct { //def arg
+typedef struct { 
+    unsigned short start;
+    unsigned short end;
+} port_range_t;
+
+typedef struct { 
+    uint32_t start;
+    uint32_t end;
+    uint64_t total_ips;
+} ip_range_t;
+
+typedef struct { 
+    _Atomic unsigned long long packets_sent;
+    _Atomic unsigned long long packets_received;
+    _Atomic unsigned long long hosts_up;
+    _Atomic unsigned long long ports_open;
+    _Atomic unsigned long long syn_acks;
+    _Atomic unsigned long long rst_replies;
+    _Atomic unsigned long long icmp_unreach;
+    _Atomic unsigned long long discovery_hits;
+    double start_time;
+    double end_time;
+    uint64_t total_packets;
+} stats_t;
+
+typedef struct { 
     char *interface;
     char *source_ip;
     char *target_range;
@@ -93,33 +118,15 @@ typedef struct { //def arg
     size_t probe_payload_len;
     struct BlackRock blackrock;
     int is_multiport;
+    uint32_t shard;
+    uint32_t shards;
+    int icmp_prescan;
+    port_range_t *port_ranges;
+    int num_port_ranges;
+    uint32_t source_ip_int;
 } scanner_config_t;
 
-typedef struct { //scan
-    _Atomic unsigned long long packets_sent;
-    _Atomic unsigned long long packets_received;
-    _Atomic unsigned long long hosts_up;
-    _Atomic unsigned long long ports_open;
-    _Atomic unsigned long long syn_acks;
-    _Atomic unsigned long long rst_replies;
-    _Atomic unsigned long long icmp_unreach;
-    double start_time;
-    double end_time;
-    uint64_t total_packets;
-} stats_t;
-
-typedef struct { //port
-    unsigned short start;
-    unsigned short end;
-} port_range_t;
-
-typedef struct { //range 
-    uint32_t start;
-    uint32_t end;
-    uint64_t total_ips;
-} ip_range_t;
-
-typedef struct { //thread worker
+typedef struct { 
     port_range_t *port_ranges;
     int num_port_ranges;
     int port_range_idx;
@@ -137,15 +144,13 @@ typedef struct { //thread worker
     uint64_t total_packets;
 } thread_work_t;
 
-typedef struct { //packet struct
+typedef struct { 
     unsigned char buffer[PACKET_SIZE];
     size_t length;
     struct sockaddr_in dest_addr;
 } packet_t;
 
-
-
-typedef struct { //thread context
+typedef struct { 
     int thread_id;
     int socket_fd;
 #ifdef USE_PFRING
@@ -166,9 +171,8 @@ typedef struct { //thread context
     struct sockaddr_ll sll;
 } thread_context_t;
 
-
-typedef struct { //process queue
-    char queue[WRITER_QUEUE_SIZE][32]; 
+typedef struct { 
+    char queue[WRITER_QUEUE_SIZE][64]; 
     int head;
     int tail;
     pthread_mutex_t mutex;
@@ -177,16 +181,21 @@ typedef struct { //process queue
     FILE *file;
 } writer_context_t;
 
-
 extern writer_context_t writer_ctx;
 extern volatile int stop_signal;
 extern pthread_mutex_t output_mutex;
 extern FILE *output_file_ptr;
 extern int quiet_mode;
 extern uint8_t *seen_ips;
+extern uint8_t *alive_ips;
+extern _Atomic uint32_t *alive_queue;
+extern _Atomic uint64_t alive_queue_head;
+extern _Atomic uint64_t alive_queue_tail;
+extern _Atomic int icmp_sender_done;
 
 #define IS_IP_SEEN(ip) (seen_ips[(uint32_t)(ip) >> 3] & (1 << ((uint32_t)(ip) & 7)))
 #define MARK_IP_SEEN(ip) (seen_ips[(uint32_t)(ip) >> 3] |= (1 << ((uint32_t)(ip) & 7)))
+#define IS_IP_ALIVE(ip) (alive_ips[(uint32_t)(ip) >> 3] & (1 << ((uint32_t)(ip) & 7)))
+#define MARK_IP_ALIVE(ip) (alive_ips[(uint32_t)(ip) >> 3] |= (1 << ((uint32_t)(ip) & 7)))
 
 #endif
-

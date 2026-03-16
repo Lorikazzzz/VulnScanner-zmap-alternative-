@@ -1,6 +1,6 @@
 #include "../include/scanner.h"
 
-int get_ifdetails(const char *iface, int *ifindex, uint8_t *mac) { // retrieves interface index and mac address
+int get_ifdetails(const char *iface, int *ifindex, uint8_t *mac) { 
     int sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock < 0) return -1;
     
@@ -20,7 +20,7 @@ int get_ifdetails(const char *iface, int *ifindex, uint8_t *mac) { // retrieves 
     return 0;
 }
 
-int get_default_iface(char *iface) { // identifies default network interface name
+int get_default_iface(char *iface) { 
     FILE *f = fopen("/proc/net/route", "r");
     if (!f) return -1;
     char line[256];
@@ -39,7 +39,7 @@ int get_default_iface(char *iface) { // identifies default network interface nam
     return -1;
 }
 
-int get_default_gateway(char *gateway_ip) { // determines default gateway ip
+int get_default_gateway(char *gateway_ip) { 
     FILE *f = fopen("/proc/net/route", "r");
     if (!f) return -1;
     char line[256];
@@ -60,7 +60,7 @@ int get_default_gateway(char *gateway_ip) { // determines default gateway ip
     return -1;
 }
 
-void force_arp(const char *dst_ip) { //  arp resolution
+void force_arp(const char *dst_ip) { 
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) return;
     struct sockaddr_in addr;
@@ -73,13 +73,12 @@ void force_arp(const char *dst_ip) { //  arp resolution
     usleep(10000); 
 }
 
-int get_gateway_mac(uint8_t *mac) { // resolves the hardware address
+int get_gateway_mac(uint8_t *mac) { 
     char gateway_ip[32];
     if (get_default_gateway(gateway_ip) == 0) {
-        if (!quiet_mode) printf("[DEBUG] Gateway IP: %s\n", gateway_ip);
         force_arp(gateway_ip);
     } else {
-        // failed to determine gateway
+        
     }
     
     usleep(200000);
@@ -106,7 +105,7 @@ int get_gateway_mac(uint8_t *mac) { // resolves the hardware address
     return -1;
 }
 
-uint32_t get_local_ip(const char *interface) { // finds the local ip
+uint32_t get_local_ip(const char *interface) { 
     struct ifaddrs *ifaddr, *ifa;
     if (getifaddrs(&ifaddr) == -1) {
         perror("getifaddrs");
@@ -131,7 +130,7 @@ uint32_t get_local_ip(const char *interface) { // finds the local ip
     return ip;
 }
 
-unsigned short calculate_ip_checksum(struct iphdr *iph) { // computes checksum for an ip header
+unsigned short calculate_ip_checksum(struct iphdr *iph) { 
     unsigned short *buf = (unsigned short *)iph;
     unsigned int sum = 0;
     iph->check = 0;
@@ -145,7 +144,7 @@ unsigned short calculate_ip_checksum(struct iphdr *iph) { // computes checksum f
     return ~sum;
 }
 
-unsigned short calculate_tcp_checksum(struct tcphdr *tcp, uint32_t src_ip, uint32_t dst_ip) { // computes the tcp checksum 
+unsigned short calculate_tcp_checksum(struct tcphdr *tcp, uint32_t src_ip, uint32_t dst_ip) { 
     uint32_t sum = 0;
     
     uint16_t tcp_len_bytes = tcp->doff * 4;
@@ -202,9 +201,9 @@ void create_tcp_packet_flags(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
     tcph->seq = htonl(100);
     tcph->ack_seq = 0;
     
-    tcph->doff = 5; // Default 20 bytes if no options
+    tcph->doff = 5; 
     
-    // Flags
+    
     tcph->fin = (flags & 0x01) ? 1 : 0;
     tcph->syn = (flags & 0x02) ? 1 : 0;
     tcph->rst = (flags & 0x04) ? 1 : 0;
@@ -216,9 +215,9 @@ void create_tcp_packet_flags(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
     tcph->check = 0;
     tcph->urg_ptr = 0;
 
-    // Optional MSS for SYN
+    
     if (flags & 0x02) {
-         tcph->doff = 6; // +4 bytes option
+         tcph->doff = 6; 
          unsigned char *opt_ptr = (unsigned char *)tcph + sizeof(struct tcphdr);
          opt_ptr[0] = 2; opt_ptr[1] = 4;
          *(uint16_t *)(opt_ptr + 2) = htons(1460);
@@ -234,7 +233,7 @@ void create_tcp_packet_flags(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
 
 void create_syn_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
                       unsigned short src_port, unsigned short dst_port,
-                      uint8_t *src_mac, uint8_t *dst_mac) { // constructs raw tcp syn packet 
+                      uint8_t *src_mac, uint8_t *dst_mac) { 
     create_tcp_packet_flags(packet, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, 0x02);
 }
 

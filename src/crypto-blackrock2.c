@@ -15,9 +15,7 @@
 #define inline _inline
 #endif
 
-/*
- * Expanded DES S-boxes
- */
+
 static const uint32_t SB1[64] =
 {
     0x01010400, 0x00000000, 0x00010000, 0x01010404,
@@ -177,9 +175,7 @@ static const uint32_t SB8[64] =
     0x10041040, 0x00041000, 0x00041000, 0x00001040,
     0x00001040, 0x00040040, 0x10000000, 0x10041000
 };
-/***************************************************************************
- * It's an s-box. You gotta have an s-box
- ***************************************************************************/
+
 const unsigned char sbox2[] = {
 0x91, 0x58, 0xb3, 0x31, 0x6c, 0x33, 0xda, 0x88,
 0x57, 0xdd, 0x8c, 0xf2, 0x29, 0x5a, 0x08, 0x9f,
@@ -221,11 +217,7 @@ const unsigned char sbox2[] = {
 };
 
 
-/****************************************************************************
- * Given a number, figure out the nearest power-of-two (16,32,64,128,etc.)
- * that can hold that number. We do this so that we can convert multiplies
- * into shifts.
- ****************************************************************************/
+
 static uint64_t
 next_power_of_two(uint64_t num)
 {
@@ -249,8 +241,7 @@ bit_count(uint64_t num)
     return bits;
 }
 
-/***************************************************************************
- ***************************************************************************/
+
 void
 blackrock2_init(struct BlackRock *br, uint64_t range, uint64_t seed, unsigned rounds)
 {
@@ -262,7 +253,7 @@ blackrock2_init(struct BlackRock *br, uint64_t range, uint64_t seed, unsigned ro
                           );
     b = next_power_of_two(range/a);
 
-    //printf("a=%llu b=%llu seed = 0x%llu\n", a, b, seed);
+    
 
     br->range = range;
 
@@ -274,8 +265,8 @@ blackrock2_init(struct BlackRock *br, uint64_t range, uint64_t seed, unsigned ro
     br->b_bits = bit_count(br->b);
     br->b_mask = br->b - 1ULL;
 
-    //printf("a: 0x%llx / %llu\n", br->a_mask, br->a_bits);
-    //printf("b: 0x%llx / %llu\n", br->b_mask, br->b_bits);
+    
+    
 
     br->rounds = rounds;
     br->seed = seed;
@@ -283,10 +274,7 @@ blackrock2_init(struct BlackRock *br, uint64_t range, uint64_t seed, unsigned ro
 }
 
 
-/***************************************************************************
- * The inner round/mixer function. In DES, it's a series of S-box lookups,
- * which 
- ***************************************************************************/
+
 static inline uint64_t
 ROUND(uint64_t r, uint64_t R, uint64_t seed)
 {
@@ -320,22 +308,13 @@ ROUND(uint64_t r, uint64_t R, uint64_t seed)
     R = r0 ^ (r1<<12) * (r2 << 24) ^ (r3 << 36) * r;
 
     return R;
-    /*return((uint64_t)sbox2[GETBYTE(R,7ULL)]<< 0ULL)
-        | ((uint64_t)sbox2[GETBYTE(R,6ULL)]<< 8ULL)
-        | ((uint64_t)sbox2[GETBYTE(R,5ULL)]<<16ULL)
-        | ((uint64_t)sbox2[GETBYTE(R,4ULL)]<<24ULL)
-        | ((uint64_t)sbox2[GETBYTE(R,3ULL)]<<32ULL)
-        | ((uint64_t)sbox2[GETBYTE(R,2ULL)]<<40ULL)
-        | ((uint64_t)sbox2[GETBYTE(R,1ULL)]<<48ULL)
-        | ((uint64_t)sbox2[GETBYTE(R,0ULL)]<<56ULL)
-        ;*/
+    
     return R;
 #endif
 }
 
 
-/***************************************************************************
- ***************************************************************************/
+
 static inline uint64_t
 ENCRYPT(unsigned r, uint64_t a_bits, uint64_t a_mask, uint64_t b_bits, uint64_t b_mask, uint64_t m, uint64_t seed)
 {
@@ -410,8 +389,7 @@ DECRYPT(unsigned r, uint64_t a, uint64_t b, uint64_t m, uint64_t seed)
     return a * R + L;
 }
 
-/***************************************************************************
- ***************************************************************************/
+
 uint64_t
 blackrock2_shuffle(const struct BlackRock *br, uint64_t m)
 {
@@ -424,8 +402,7 @@ blackrock2_shuffle(const struct BlackRock *br, uint64_t m)
     return c;
 }
 
-/***************************************************************************
- ***************************************************************************/
+
 uint64_t
 blackrock2_unshuffle(const struct BlackRock *br, uint64_t m)
 {
@@ -439,9 +416,7 @@ blackrock2_unshuffle(const struct BlackRock *br, uint64_t m)
 }
 
 
-/***************************************************************************
- * This function called only during selftest/regression-test.
- ***************************************************************************/
+
 static unsigned
 verify(struct BlackRock *br, uint64_t max)
 {
@@ -450,19 +425,17 @@ verify(struct BlackRock *br, uint64_t max)
     unsigned is_success = 1;
     uint64_t range = br->range;
 
-    /* Allocate a list of 1-byte counters */
+    
     list = CALLOC(1, (size_t)((range<max)?range:max));
     
-    /* For all numbers in the range, verify increment the counter for
-     * the output. */
+    
     for (i=0; i<range; i++) {
         uint64_t x = blackrock2_shuffle(br, i);
         if (x < max)
             list[x]++;
     }
 
-    /* Now check the output to make sure that every counter is set exactly
-     * to the value of '1'. */
+    
     for (i=0; i<max && i<range; i++) {
         if (list[i] != 1)
             is_success = 0;
@@ -473,9 +446,7 @@ verify(struct BlackRock *br, uint64_t max)
     return is_success;
 }
 
-/***************************************************************************
- * Benchmarks the crypto function.
- ***************************************************************************/
+
 void
 blackrock2_benchmark(unsigned rounds)
 {
@@ -489,23 +460,16 @@ blackrock2_benchmark(unsigned rounds)
     printf("-- blackrock-2 -- \n");
     printf("rounds = %u\n", rounds);
     blackrock2_init(&br, range, 1, rounds);
-/*printf("range = 0x%10" PRIx64 "\n", range);
-printf("rangex= 0x%10" PRIx64 "\n", br.a*br.b);
-printf("    a = 0x%10" PRIx64 "\n", br.a);
-printf("    b = 0x%10" PRIx64 "\n", br.b);*/
 
-    /*
-     * Time the algorithm
-     */
+
+    
     start = pixie_nanotime();
     for (i=0; i<ITERATIONS; i++) {
         result += blackrock2_shuffle(&br, i);
     }
     stop = pixie_nanotime();
 
-    /*
-     * Print the results
-     */
+    
     if (result) {
         double elapsed = ((double)(stop - start))/(1000000000.0);
         double rate = ITERATIONS/elapsed;
@@ -520,8 +484,7 @@ printf("    b = 0x%10" PRIx64 "\n", br.b);*/
 
 }
 
-/***************************************************************************
- ***************************************************************************/
+
 int
 blackrock2_selftest(void)
 {
@@ -529,13 +492,7 @@ blackrock2_selftest(void)
     int is_success = 0;
     uint64_t range;
 
-    /* @marshray
-     * Basic test of decryption. I take the index, encrypt it, then decrypt it,
-     * which means I should get the original index back again. Only, it's not
-     * working. The decryption fails. The reason it's failing is obvious -- I'm
-     * just not seeing it though. The error is probably in the 'unfe()'
-     * function above.
-     */
+    
     {
         struct BlackRock br;
         uint64_t result, result2;
@@ -545,7 +502,7 @@ blackrock2_selftest(void)
             result = blackrock2_shuffle(&br, i);
             result2 = blackrock2_unshuffle(&br, result);
             if (i != result2)
-                return 1; /*fail*/
+                return 1; 
         }
 
     }
@@ -565,9 +522,9 @@ blackrock2_selftest(void)
 
         if (!is_success) {
             fprintf(stderr, "BLACKROCK: randomization failed\n");
-            return 1; /*fail*/
+            return 1; 
         }
     }
 
-    return 0; /*success*/
+    return 0; 
 }
