@@ -23,6 +23,7 @@ Commands: \
 git clone https://github.com/Lorikazzzz/VulnScanner-zmap-alternative-.git
 cd VulnScanner-zmap-alternative-
 make (Add USE_PFRING_ZC=1 for pfring support)
+make install
 ```
 
   
