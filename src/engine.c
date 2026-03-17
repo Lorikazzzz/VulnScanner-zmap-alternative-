@@ -76,6 +76,19 @@ void setup_scan(scanner_config_t *config) {
         if (get_gateway_mac(config->dst_mac) < 0) memset(config->dst_mac, 0xFF, 6);
     }
 
+    if (config->whitelist_file) {
+        if (!load_whitelist(config->whitelist_file)) {
+            fprintf(stderr, "[-] Failed to load whitelist from %s\n", config->whitelist_file);
+            exit(1);
+        }
+    }
+    if (config->blacklist_file) {
+        if (!load_blacklist(config->blacklist_file)) {
+            fprintf(stderr, "[-] Failed to load blacklist from %s\n", config->blacklist_file);
+            exit(1);
+        }
+    }
+
     if (!quiet_mode) {
         struct in_addr addr;
         addr.s_addr = config->source_ip_int;
@@ -127,12 +140,13 @@ void run_scan(scanner_config_t *config) {
         atomic_init(&alive_queue_tail, 0);
         atomic_init(&icmp_sender_done, 0);
     }
-    
+
     int original_method = config->scan_method;
     if (config->icmp_prescan) {
         config->scan_method = SCAN_METHOD_ICMP_ECHO;
+        if (!quiet_mode) printf("[*] Pipelined Scan: ICMP + SYN\n");
     }
-    
+
     memset(&stats, 0, sizeof(stats_t));
     stats.total_packets = total_packets;
     thread_context_t scan_ctx[MAX_THREADS];

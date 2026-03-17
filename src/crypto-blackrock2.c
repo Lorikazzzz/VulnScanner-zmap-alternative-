@@ -1,8 +1,4 @@
 #include "crypto-blackrock.h"
-#include "pixie-timer.h"
-#include "unusedparm.h"
-#include "util-malloc.h"
-#include "util-safefunc.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -322,7 +318,7 @@ ENCRYPT(unsigned r, uint64_t a_bits, uint64_t a_mask, uint64_t b_bits, uint64_t 
     unsigned j = 1;
     uint64_t tmp;
 
-    UNUSEDPARM(b_bits);
+    (void)b_bits;
 
     L = m & a_mask;
     R = m >> a_bits;
@@ -417,114 +413,7 @@ blackrock2_unshuffle(const struct BlackRock *br, uint64_t m)
 
 
 
-static unsigned
-verify(struct BlackRock *br, uint64_t max)
-{
-    unsigned char *list;
-    uint64_t i;
-    unsigned is_success = 1;
-    uint64_t range = br->range;
-
-    
-    list = CALLOC(1, (size_t)((range<max)?range:max));
-    
-    
-    for (i=0; i<range; i++) {
-        uint64_t x = blackrock2_shuffle(br, i);
-        if (x < max)
-            list[x]++;
-    }
-
-    
-    for (i=0; i<max && i<range; i++) {
-        if (list[i] != 1)
-            is_success = 0;
-    }
-
-    free(list);
-
-    return is_success;
-}
 
 
-void
-blackrock2_benchmark(unsigned rounds)
-{
-    struct BlackRock br;
-    uint64_t range = 0x010356789123ULL;
-    uint64_t i;
-    uint64_t result = 0;
-    uint64_t start, stop;
-    static const uint64_t ITERATIONS = 5000000ULL;
-
-    printf("-- blackrock-2 -- \n");
-    printf("rounds = %u\n", rounds);
-    blackrock2_init(&br, range, 1, rounds);
 
 
-    
-    start = pixie_nanotime();
-    for (i=0; i<ITERATIONS; i++) {
-        result += blackrock2_shuffle(&br, i);
-    }
-    stop = pixie_nanotime();
-
-    
-    if (result) {
-        double elapsed = ((double)(stop - start))/(1000000000.0);
-        double rate = ITERATIONS/elapsed;
-
-        rate /= 1000000.0;
-
-        printf("iterations/second = %5.3f-million\n", rate);
-
-    }
-
-    printf("\n");
-
-}
-
-
-int
-blackrock2_selftest(void)
-{
-    uint64_t i;
-    int is_success = 0;
-    uint64_t range;
-
-    
-    {
-        struct BlackRock br;
-        uint64_t result, result2;
-        blackrock2_init(&br, 1000, 0, 6);
-
-        for (i=0; i<10; i++) {
-            result = blackrock2_shuffle(&br, i);
-            result2 = blackrock2_unshuffle(&br, result);
-            if (i != result2)
-                return 1; 
-        }
-
-    }
-
-
-    range = 3015 * 3;
-
-    for (i=0; i<5; i++) {
-        struct BlackRock br;
-
-        range += 11 + i;
-        range *= 1 + i;
-
-        blackrock2_init(&br, range, time(0), 6);
-
-        is_success = verify(&br, range);
-
-        if (!is_success) {
-            fprintf(stderr, "BLACKROCK: randomization failed\n");
-            return 1; 
-        }
-    }
-
-    return 0; 
-}

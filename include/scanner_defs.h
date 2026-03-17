@@ -47,12 +47,8 @@
 #define MAX_IPS_PER_THREAD 16777216
 
 #define SCAN_METHOD_SYN 0
-#define SCAN_METHOD_ACK 1
-#define SCAN_METHOD_FIN 2
-#define SCAN_METHOD_NULL 3
-#define SCAN_METHOD_XMAS 4
-#define SCAN_METHOD_UDP 5
-#define SCAN_METHOD_ICMP_ECHO 6
+#define SCAN_METHOD_UDP 1
+#define SCAN_METHOD_ICMP_ECHO 2
 
 #define ETH_HDRLEN 14
 #define IP4_HDRLEN 20
@@ -98,12 +94,7 @@ typedef struct {
     unsigned long bandwidth_limit;
     int senders;
     int receivers;
-    int verbose;
-    int dry_run;
     int cooldown_secs;
-    int scan_type;
-    int output_format;
-    int quiet;
     uint8_t src_mac[6];
     uint8_t dst_mac[6];
     int ifindex;
@@ -113,7 +104,6 @@ typedef struct {
     pfring_zc_cluster *zc_cluster;
     pfring_zc_buffer_pool *zc_pool;
 #endif
-    char *probe_args;
     uint8_t *probe_payload;
     size_t probe_payload_len;
     struct BlackRock blackrock;

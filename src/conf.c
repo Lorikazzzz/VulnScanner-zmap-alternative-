@@ -11,7 +11,7 @@ static void usage() {
     printf("  -i, --interface=name      Network interface to use\n");
     printf("  -S, --source-ip=ip        Source IP address\n");
     printf("  -G, --gateway-mac=mac     Gateway MAC address\n");
-    printf("  -M, --probe-module=name   Scan method (tcp, syn, synscan, udp)\n");
+    printf("  -M, --probe-module=name   Scan method (tcp, udp)\n");
     printf("  -T, --sender-threads=num  Number of sender threads (default: 1)\n");
     printf("  -R, --receivers=num       Number of receiver threads (default: 1)\n");
     printf("  -c, --cooldown-time=sec   Cooldown time (default: 5s)\n");

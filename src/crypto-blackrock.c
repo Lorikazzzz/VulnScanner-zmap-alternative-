@@ -1,7 +1,4 @@
-
 #include "crypto-blackrock.h"
-#include "pixie-timer.h"
-#include "util-malloc.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -226,113 +223,7 @@ blackrock_unshuffle(const struct BlackRock *br, uint64_t m)
 
 
 
-static unsigned
-blackrock_verify(struct BlackRock *br, uint64_t max)
-{
-    unsigned char *list;
-    uint64_t i;
-    unsigned is_success = 1;
-    uint64_t range = br->range;
-
-    
-    list = CALLOC(1, (size_t)((range<max)?range:max));
-    
-    
-    for (i=0; i<range; i++) {
-        uint64_t x = blackrock_shuffle(br, i);
-        if (x < max)
-            list[x]++;
-    }
-
-    
-    for (i=0; i<max && i<range; i++) {
-        if (list[i] != 1)
-            is_success = 0;
-    }
-
-    free(list);
-
-    return is_success;
-}
 
 
-void
-blackrock_benchmark(unsigned rounds)
-{
-    struct BlackRock br;
-    uint64_t range = 0x012356789123ULL;
-    uint64_t i;
-    uint64_t result = 0;
-    uint64_t start, stop;
-    static const uint64_t ITERATIONS = 5000000ULL;
-
-    printf("-- blackrock-1 -- \n");
-    printf("rounds = %u\n", rounds);
-    blackrock_init(&br, range, 1, rounds);
-
-    
-    start = pixie_nanotime();
-    for (i=0; i<ITERATIONS; i++) {
-        result += blackrock_shuffle(&br, i);
-    }
-    stop = pixie_nanotime();
-
-    
-    if (result) {
-        double elapsed = ((double)(stop - start))/(1000000000.0);
-        double rate = ITERATIONS/elapsed;
-
-        rate /= 1000000.0;
-
-        printf("iterations/second = %5.3f-million\n", rate);
-
-    }
-
-    printf("\n");
-
-}
 
 
-int
-blackrock_selftest(void)
-{
-    uint64_t i;
-    uint64_t range;
-
-    
-    {
-        struct BlackRock br;
-        
-        blackrock_init(&br, 1000, 0, 4);
-
-        for (i=0; i<10; i++) {
-            uint64_t result, result2;
-            result = blackrock_shuffle(&br, i);
-            result2 = blackrock_unshuffle(&br, result);
-            if (i != result2)
-                return 1; 
-        }
-
-    }
-
-
-    range = 3015 * 3;
-
-    for (i=0; i<5; i++) {
-        struct BlackRock br;
-        int is_success;
-
-        range += 10 + i;
-        range *= 2;
-
-        blackrock_init(&br, range, time(0), 4);
-
-        is_success = blackrock_verify(&br, range);
-        if (!is_success) {
-            fprintf(stderr, "BLACKROCK: randomization failed\n");
-            return 1; 
-        }
-    }
-
-    return 0; 
-}
