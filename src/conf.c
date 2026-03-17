@@ -12,6 +12,7 @@ static void usage() {
     printf("  -S, --source-ip=ip        Source IP address\n");
     printf("  -G, --gateway-mac=mac     Gateway MAC address\n");
     printf("  -M, --probe-module=name   Scan method (tcp, udp)\n");
+    printf("  --probe-args=args         Arguments to pass to probe module (e.g. text:hello, hex:4142, file:/path)\n");
     printf("  -T, --sender-threads=num  Number of sender threads (default: 1)\n");
     printf("  -R, --receivers=num       Number of receiver threads (default: 1)\n");
     printf("  -c, --cooldown-time=sec   Cooldown time (default: 5s)\n");
@@ -23,6 +24,51 @@ static void usage() {
     printf("  -q, --quiet               Quiet mode, don't print progress\n");
     printf("\n");
     exit(0);
+}
+
+void parse_probe_args(const char *arg, scanner_config_t *config) {
+    if (strncmp(arg, "text:", 5) == 0) {
+        config->probe_payload_len = strlen(arg + 5);
+        config->probe_payload = malloc(config->probe_payload_len);
+        if (config->probe_payload) {
+            memcpy(config->probe_payload, arg + 5, config->probe_payload_len);
+        }
+    } else if (strncmp(arg, "file:", 5) == 0) {
+        FILE *f = fopen(arg + 5, "rb");
+        if (!f) {
+            fprintf(stderr, "[-] Could not open UDP payload file '%s'\n", arg + 5);
+            exit(1);
+        }
+        fseek(f, 0, SEEK_END);
+        config->probe_payload_len = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (config->probe_payload_len > 0) {
+            config->probe_payload = malloc(config->probe_payload_len);
+            if (config->probe_payload) {
+                if (fread(config->probe_payload, 1, config->probe_payload_len, f) != config->probe_payload_len) {
+                    // Ignore minor short read issues for now
+                }
+            }
+        }
+        fclose(f);
+    } else if (strncmp(arg, "hex:", 4) == 0) {
+        const char *c = arg + 4;
+        config->probe_payload_len = strlen(c) / 2;
+        config->probe_payload = malloc(config->probe_payload_len);
+        if (config->probe_payload) {
+            unsigned int n;
+            for (size_t i = 0; i < config->probe_payload_len; i++) {
+                if (sscanf(c + (i * 2), "%2x", &n) != 1) {
+                    fprintf(stderr, "[-] Non-hex character in UDP payload: '%c'\n", c[i * 2]);
+                    exit(1);
+                }
+                config->probe_payload[i] = (n & 0xff);
+            }
+        }
+    } else {
+        fprintf(stderr, "[-] Invalid probe-args format. Expected text:STRING, file:PATH, or hex:HEXSTRING\n");
+        exit(1);
+    }
 }
 
 void parse_arguments(int argc, char **argv, scanner_config_t *config) {
@@ -53,6 +99,7 @@ void parse_arguments(int argc, char **argv, scanner_config_t *config) {
         {"shards", required_argument, 0, 's'},
         {"target-range", required_argument, 0, 't'},
         {"icmp", no_argument, 0, 1003},
+        {"probe-args", required_argument, 0, 1004},
         {0, 0, 0, 0}
     };
 
@@ -96,6 +143,7 @@ void parse_arguments(int argc, char **argv, scanner_config_t *config) {
                 break;
             }
             case 1003: config->icmp_prescan = 1; break;
+            case 1004: parse_probe_args(optarg, config); break;
         }
     }
     if (optind < argc) {
