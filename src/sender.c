@@ -78,7 +78,7 @@ void *sender_thread(void *arg) {
     memset(&req, 0, sizeof(req));
     req.tp_block_size = 4096 * 256;
     req.tp_block_nr = 64;
-    req.tp_frame_size = 512; 
+    req.tp_frame_size = 2048; 
     req.tp_frame_nr = (req.tp_block_size * req.tp_block_nr) / req.tp_frame_size;
 
     int val = 1;
@@ -227,7 +227,7 @@ void *alive_sender_thread(void *arg) {
     memset(&req, 0, sizeof(req));
     req.tp_block_size = 4096 * 128;
     req.tp_block_nr = 32;
-    req.tp_frame_size = 512;
+    req.tp_frame_size = 2048;
     req.tp_frame_nr = (req.tp_block_size * req.tp_block_nr) / req.tp_frame_size;
 
     int val = 1;

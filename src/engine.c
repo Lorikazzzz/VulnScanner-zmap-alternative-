@@ -31,7 +31,6 @@ void *status_thread(void *arg) {
         unsigned long long current_sent = atomic_load(&ctx->stats->packets_sent);
         unsigned long long current_recv = atomic_load(&ctx->stats->packets_received);
         unsigned long long hits = atomic_load(&ctx->stats->ports_open);
-        unsigned long long disc_hits = atomic_load(&ctx->stats->discovery_hits);
         
         double pps_sent = since_last > 0 ? (double)(current_sent - last_sent) / since_last : 0;
         double pps_recv = since_last > 0 ? (double)(current_recv - last_recv) / since_last : 0;
@@ -42,9 +41,7 @@ void *status_thread(void *arg) {
         double avg_pps_sent = elapsed > 0 ? (double)current_sent / elapsed : 0;
         
         double hitrate = 0;
-        if (disc_hits > 0) {
-            hitrate = (double)hits / disc_hits * 100.0;
-        } else if (current_sent > 0) {
+        if (current_sent > 0) {
             hitrate = (double)hits / current_sent * 100.0;
         }
         char s_pps_sent[32], s_avg_pps_sent[32], s_pps_recv[32];

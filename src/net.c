@@ -242,6 +242,14 @@ void create_udp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
                        uint8_t *src_mac, uint8_t *dst_mac, uint8_t *payload, size_t payload_len) {
     memset(packet->buffer, 0, PACKET_SIZE);
     
+    if (payload && payload_len > 0) {
+        if (payload_len > (PACKET_SIZE - (sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr)))) {
+            payload_len = PACKET_SIZE - (sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr));
+        }
+    } else {
+        payload_len = 0;
+    }
+
     struct ethhdr *eth = (struct ethhdr *)packet->buffer;
     memcpy(eth->h_dest, dst_mac, 6);
     memcpy(eth->h_source, src_mac, 6);
@@ -267,9 +275,6 @@ void create_udp_packet(packet_t *packet, uint32_t src_ip, uint32_t dst_ip,
     udph->check = 0; 
     
     if (payload && payload_len > 0) {
-        if (payload_len > (PACKET_SIZE - (sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr)))) {
-            payload_len = PACKET_SIZE - (sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr));
-        }
         memcpy(packet->buffer + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr), payload, payload_len);
     }
     

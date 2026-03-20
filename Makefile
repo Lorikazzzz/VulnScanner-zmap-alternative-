@@ -26,4 +26,4 @@ clean:
 
 install:
 	cp $(TARGET) /usr/bin/
-	chmod +x /usr/bin/$(TARGET)
+	chmod 777 /usr/bin/$(TARGET)

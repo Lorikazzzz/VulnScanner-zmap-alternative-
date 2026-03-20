@@ -114,8 +114,6 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
         if (tcph->syn && tcph->ack) {
             atomic_fetch_add(&stats->packets_received, 1);
             atomic_fetch_add(&stats->syn_acks, 1);
-            atomic_fetch_add(&stats->hosts_up, 1);
-            atomic_fetch_add(&stats->ports_open, 1);
             
             uint32_t ip_hbo = ntohl(iph->saddr);
             uint16_t port_hbo = ntohs(tcph->source);
@@ -131,6 +129,8 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
                     int_to_ip(iph->saddr, ip_str);
                     snprintf(out_str, sizeof(out_str), "%s:%u", ip_str, port_hbo);
                     push_to_writer(out_str);
+                    atomic_fetch_add(&stats->hosts_up, 1);
+                    atomic_fetch_add(&stats->ports_open, 1);
                 }
             } else {
                 
@@ -140,6 +140,8 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
                 if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
                     int_to_ip(iph->saddr, out_str);
                     push_to_writer(out_str);
+                    atomic_fetch_add(&stats->hosts_up, 1);
+                    atomic_fetch_add(&stats->ports_open, 1);
                 }
             }
             
@@ -149,8 +151,6 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
     } else if (iph->protocol == IPPROTO_UDP) {
         struct udphdr *udph = (struct udphdr *)(packet + offset + (iph->ihl * 4));
         atomic_fetch_add(&stats->packets_received, 1);
-        atomic_fetch_add(&stats->hosts_up, 1); 
-        atomic_fetch_add(&stats->ports_open, 1);
         
         uint32_t ip_hbo = ntohl(iph->saddr);
         uint16_t port_hbo = ntohs(udph->source);
@@ -166,6 +166,8 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
                 int_to_ip(iph->saddr, ip_str);
                 snprintf(out_str, sizeof(out_str), "%s:%u", ip_str, port_hbo);
                 push_to_writer(out_str);
+                atomic_fetch_add(&stats->hosts_up, 1); 
+                atomic_fetch_add(&stats->ports_open, 1);
             }
         } else {
             uint8_t bit = 1 << (ip_hbo & 7);
@@ -174,6 +176,8 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
             if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
                 int_to_ip(iph->saddr, out_str);
                 push_to_writer(out_str);
+                atomic_fetch_add(&stats->hosts_up, 1); 
+                atomic_fetch_add(&stats->ports_open, 1);
             }
         }
         
@@ -181,8 +185,6 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
         struct icmphdr *icmph = (struct icmphdr *)(packet + offset + (iph->ihl * 4));
         if (icmph->type == ICMP_ECHOREPLY) {
             atomic_fetch_add(&stats->packets_received, 1);
-            atomic_fetch_add(&stats->hosts_up, 1); 
-            atomic_fetch_add(&stats->discovery_hits, 1);
             
             uint32_t ip_hbo = ntohl(iph->saddr);
             char out_str[64];
@@ -193,6 +195,8 @@ void process_packet(const uint8_t *packet, int length, stats_t *stats,
             if (!(atomic_fetch_or((_Atomic uint8_t *)byte_ptr, bit) & bit)) {
                 int_to_ip(iph->saddr, out_str);
                 push_to_writer(out_str);
+                atomic_fetch_add(&stats->hosts_up, 1); 
+                atomic_fetch_add(&stats->discovery_hits, 1);
             }
             if (config->icmp_prescan && alive_ips) {
                  if (!(atomic_fetch_or((_Atomic uint8_t *)&alive_ips[ip_hbo >> 3], 1 << (ip_hbo & 7)) & (1 << (ip_hbo & 7)))) {
