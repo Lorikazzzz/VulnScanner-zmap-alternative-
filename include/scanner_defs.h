@@ -100,6 +100,7 @@ typedef struct {
     int ifindex;
     int gateway_set;
     int scan_method;
+    int original_scan_method;
 #ifdef USE_PFRING_ZC
     pfring_zc_cluster *zc_cluster;
     pfring_zc_buffer_pool *zc_pool;

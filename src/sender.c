@@ -247,7 +247,7 @@ void *alive_sender_thread(void *arg) {
 
     packet_t syn_pkt, udp_pkt;
     create_syn_packet(&syn_pkt, ctx->src_ip, 0, ctx->src_port, ctx->work.port_ranges[0].start, ctx->config->src_mac, ctx->config->dst_mac);
-    if (ctx->config->scan_method == SCAN_METHOD_UDP) {
+    if (ctx->config->original_scan_method == SCAN_METHOD_UDP) {
         create_udp_packet(&udp_pkt, ctx->src_ip, 0, ctx->src_port, ctx->work.port_ranges[0].start, ctx->config->src_mac, ctx->config->dst_mac, ctx->config->probe_payload, ctx->config->probe_payload_len);
     }
 
@@ -284,7 +284,7 @@ void *alive_sender_thread(void *arg) {
                 t_hdr->tp_mac = tp_mac;
                 t_hdr->tp_net = tp_mac + sizeof(struct ethhdr);
                 
-                if (ctx->config->scan_method == SCAN_METHOD_UDP) {
+                if (ctx->config->original_scan_method == SCAN_METHOD_UDP) {
                     memcpy(pkt_ptr, udp_pkt.buffer, udp_pkt.length);
                     t_hdr->tp_len = udp_pkt.length;
                     struct iphdr *iph = (struct iphdr *)(pkt_ptr + sizeof(struct ethhdr));
